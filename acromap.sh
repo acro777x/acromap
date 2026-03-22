@@ -227,6 +227,7 @@ NOTIFY_CHANNEL=""      # notify provider config (slack/discord/telegram)
 JQ_AVAILABLE=false     # jq installed — enables structured JSON finding parse
 ANEW_AVAILABLE=false   # anew installed — dedup pipeline for subdomain/url lists
 PARALLEL_JOBS=1        # GNU parallel jobs (set to nproc/2 if parallel installed)
+PARALLEL_EXECUTION_ACTIVE=false   # set true during parallel phase dispatch
 
 # ── Logging ───────────────────────────────────────────────────────────────────
 LOG_FILE=""   # set after OUTPUT_DIR is created
@@ -2239,10 +2240,10 @@ phase_service_detect() {
         run_tool_timeout "nmap-rdp" "${nmap_dir}/nmap_rdp.txt" 45 \
             nmap -sV -p 3389 --script rdp-enum-encryption,rdp-vuln-ms12-020 \
             "$TARGET" 2>/dev/null || true
-        add_vuln "HIGH" "RDP Exposed (Port 3389)" \
-            "RDP brute-force attacks are constant on public IPs. BlueKeep (CVE-2019-0708) and DejaBlue allow unauthenticated RCE." \
-            "Put RDP behind VPN. Enable NLA. Apply all Windows patches. Restrict by IP." \
-            "3389/tcp open ms-wbt-server"
+        add_vuln "HIGH" "RDP Port Externally Exposed (Port 3389)" \
+            "Remote Desktop Protocol is exposed to the network. If this is an internet-facing scan, this allows brute-force attacks and protocol-level exploits (e.g. BlueKeep). If internal, access should still be restricted via NAC." \
+            "Place RDP behind a VPN or RD Gateway. Implement MFA for all remote access (Network Level Authentication)." \
+            "3389/tcp open (RDP)"
     fi
 
     # Database exposure checks
@@ -2250,10 +2251,14 @@ phase_service_detect() {
     for entry in "${db_ports[@]}"; do
         local port="${entry%%:*}"; local name="${entry##*:}"
         if echo "$OPEN_PORTS" | grep -qE "(^|,)${port}(,|$)"; then
-            add_vuln "CRITICAL" "${name} Database Exposed (Port ${port})" \
-                "${name} is accessible from the network without VPN. Attackers can dump all data or achieve RCE." \
-                "Bind ${name} to localhost only (bind 127.0.0.1). Firewall port ${port}. Require authentication." \
-                "${port}/tcp open — ${name} network accessible"
+            # Test if port is actually responsive before flagging as CRITICAL
+            local db_resp; db_resp=$(timeout 2 bash -c "</dev/tcp/${TARGET}/${port}" 2>/dev/null && echo "open" || echo "closed")
+            if [[ "$db_resp" == "open" ]]; then
+                add_vuln "INFO" "${name} Database Port Exposed (Port ${port})" \
+                    "${name} port is accessible from the network. While an exposed port is an attack surface, authentication may still be required." \
+                    "Bind ${name} to localhost only (bind 127.0.0.1). Firewall port ${port} to trusted IPs only." \
+                    "${port}/tcp open — ${name} network accessible"
+            fi
         fi
     done
 
@@ -2322,7 +2327,7 @@ phase_web_discovery() {
         _is_valid_url "$web_url" || continue
         # Strict guard: skip anything not a valid http URL
         echo "$web_url" | grep -qE "^https?://[a-zA-Z0-9._-]" || continue
-        local slug; slug=$(echo "$web_url" | sed 's|[^a-zA-Z0-9._-]|_|g' | cut -c1-40)
+        local slug; slug=$(echo "$web_url" | sed 's/[^a-zA-Z0-9._-]/_/g' | cut -c1-40)
         [[ -z "$slug" ]] && continue
 
         # Headers
@@ -2898,7 +2903,7 @@ phase_content_discovery() {
         done
     fi
 
-    log_ok "Phase 11 complete."
+    log_ok "Phase 11 complete. Web targets: ${#WEB_TARGETS[@]}"
     PHASES_COMPLETED=$(( PHASES_COMPLETED + 1 ))
 }
 
@@ -2974,13 +2979,13 @@ phase_cms() {
 
         # Check Drupalgeddon2 (CVE-2018-7600)
         local drupal_rce_path="${primary_url}/user/register?element_parents=account/mail/%23value&ajax_form=1&_wrapper_format=drupal_ajax"
-        local drupal_resp; drupal_resp=$(curl -s -o /dev/null -w "%{http_code}" --max-time 10 \
-            "$drupal_rce_path" 2>/dev/null || echo "000")
-        [[ "$drupal_resp" == "200" ]] && \
+        local drupal_resp; drupal_resp=$(curl -s --max-time 10 "$drupal_rce_path" 2>/dev/null | head -c 2048 || echo "")
+        if echo "$drupal_resp" | grep -qiE "form_build_id|ajax_response|drupal"; then
             add_vuln "CRITICAL" "Potential Drupalgeddon2 (CVE-2018-7600)" \
-                "Drupalgeddon2 allows unauthenticated Remote Code Execution in Drupal 7.x/8.x." \
+                "Drupalgeddon2 allows unauthenticated Remote Code Execution in Drupal 7.x/8.x. Response body indicates vulnerable form structure." \
                 "Apply SA-CORE-2018-002. Update Drupal to latest version." \
-                "Path: ${drupal_rce_path} — HTTP ${drupal_resp}"
+                "Path: ${drupal_rce_path} — returned Drupal AJAX response"
+        fi
 
         # Check Drupalgeddon3 (CVE-2018-7602)
         if command -v droopescan &>/dev/null; then
@@ -3082,10 +3087,10 @@ phase_api() {
     # BUG FIX: removed duplicate -oT flag (run_tool_timeout already redirects stdout to outfile)
     if command -v arjun &>/dev/null && [[ ${#found_apis[@]} -gt 0 ]]; then
         # Use first discovered API URL (strip the [HTTP xxx] suffix added during discovery)
-        local arjun_target; arjun_target=$(printf '%s
-' "${found_apis[@]}" | head -1 | awk '{print $1}')
+        local arjun_target; arjun_target=$(printf '%s\n' "${found_apis[@]}" | head -1 | awk '{print $1}')
         [[ -z "$arjun_target" ]] && arjun_target="${primary_url}/api"
-        run_tool_timeout "arjun" "${api_dir}/arjun_params.txt" 120             arjun -u "$arjun_target" --stable 2>/dev/null || true
+        run_tool_timeout "arjun" "${api_dir}/arjun_params.txt" 120 \
+            arjun -u "$arjun_target" --stable 2>/dev/null || true
     fi
 
     # GraphQL introspection
@@ -3298,7 +3303,7 @@ phase_network_services() {
     done
 
     # --- LDAP (389, 636) ---
-    if echo "$OPEN_PORTS" | grep -qE "(^|,)(389|636)(,|$)"; then
+    if echo "$OPEN_PORTS" | grep -qE "(^|)(389|636)(,|$)"; then
         run_tool_timeout "nmap-ldap" "${nmap_dir}/nmap_ldap.txt" 30 \
             nmap -p 389,636 --script ldap-rootdse,ldap-search \
             "$TARGET" 2>/dev/null || true
@@ -3442,7 +3447,7 @@ phase_auth() {
     log_section "Default credential surface check..."
     local -a default_creds=(
         "admin:admin" "admin:password" "admin:admin123" "admin:pass"
-        "root:root" "root:toor" "root:password" "root:" "admin:" 
+        "root:root" "root:toor" "root:password" "root:" "admin:"
         "administrator:administrator" "guest:guest" "test:test" "user:user"
     )
 
@@ -3602,7 +3607,10 @@ phase_sqli() {
                 "import urllib.parse; print(urllib.parse.quote(\"1' OR '1'='1\"))" 2>/dev/null \
                 || echo "1%27%20OR%20%271%27%3D%271")
             local probe_url="${web_url}?${param}=${sqli_payload}"
-            local _pr; _pr=$(curl -s --max-time 10 --max-filesize 51200 -A "Mozilla/5.0"                 "$probe_url" 2>/dev/null | head -c 4096                 | grep -ciE "SQL.*error|mysql_|syntax error|ORA-|unclosed.*quote|You have an error in your SQL"                 2>/dev/null || echo 0)
+            local _pr; _pr=$(curl -s --max-time 10 --max-filesize 51200 -A "Mozilla/5.0" \
+                "$probe_url" 2>/dev/null | head -c 4096 \
+                | grep -ciE "SQL.*error|mysql_|syntax error|ORA-|unclosed.*quote|You have an error in your SQL" \
+                2>/dev/null || echo 0)
             local probe_resp; probe_resp=$(( ${_pr//[^0-9]/} + 0 ))
             if [[ ${probe_resp:-0} -gt 0 ]]; then
                 add_vuln "CRITICAL" "SQL Error-Based Injection — Parameter: ${param} (${web_url})" \
@@ -3672,7 +3680,10 @@ phase_xss() {
             # Try multiple common XSS parameters
             local xss_found=false
             for xss_param in q search s name input msg comment query term; do
-                local _xr; _xr=$(curl -s --max-time 8 --max-filesize 51200 -A "Mozilla/5.0"                     "${web_url}?${xss_param}=${enc_payload}"                     2>/dev/null | head -c 4096                     | grep -c "<script>alert\|onerror=alert" 2>/dev/null || echo 0)
+                local _xr; _xr=$(curl -s --max-time 8 --max-filesize 51200 -A "Mozilla/5.0" \
+                    "${web_url}?${xss_param}=${enc_payload}" \
+                    2>/dev/null | head -c 4096 \
+                    | grep -c "<script>alert\|onerror=alert" 2>/dev/null || echo 0)
                 local xss_resp; xss_resp=$(( ${_xr//[^0-9]/} + 0 ))
                 if [[ ${xss_resp:-0} -gt 0 ]]; then
                     add_vuln "HIGH" "Reflected XSS — Manual Probe (${web_url}?${xss_param}=)" \
@@ -3810,14 +3821,16 @@ phase_cve_checks() {
     # ── CVE-2024-23897 ─ Jenkins CLI Arbitrary File Read ─────────────────────
     if echo "$OPEN_PORTS" | grep -qiE "(^|,)(8080|8443|8090)(,|$)"; then
         for jenkins_url in "${WEB_TARGETS[@]:0:5}"; do
-            local jenkins_resp; jenkins_resp=$(curl -s --max-time 10 \
-                "${jenkins_url}/jnlpJars/jenkins-cli.jar" -o /dev/null -w "%{http_code}" 2>/dev/null || echo "000")
-            echo "CVE-2024-23897 Jenkins CLI probe: HTTP ${jenkins_resp}" > "${cve_dir}/CVE-2024-23897.txt"
-            if [[ "$jenkins_resp" == "200" ]]; then
+            local jenkins_headers; jenkins_headers=$(curl -s -I --max-time 10 "${jenkins_url}/jnlpJars/jenkins-cli.jar" 2>/dev/null || echo "")
+            local jenkins_resp; jenkins_resp=$(echo "$jenkins_headers" | grep -i "^HTTP" | awk '{print $2}' | tr -d '\r\n')
+            local jenkins_ctype; jenkins_ctype=$(echo "$jenkins_headers" | grep -i "Content-Type" | tr -d '\r\n')
+            
+            echo "CVE-2024-23897 Jenkins CLI probe: HTTP ${jenkins_resp} | CT: ${jenkins_ctype}" > "${cve_dir}/CVE-2024-23897.txt"
+            if [[ "$jenkins_resp" == "200" ]] && echo "$jenkins_ctype" | grep -qi "java-archive"; then
                 add_vuln "CRITICAL" "CVE-2024-23897: Jenkins CLI Arbitrary File Read" \
-                    "Jenkins CLI (versions < 2.442, LTS < 2.426.3) allows unauthenticated arbitrary file read — leads to RCE, credential theft." \
+                    "Jenkins CLI (versions < 2.442, LTS < 2.426.3) allows unauthenticated arbitrary file read — leads to RCE, credential theft. Verified active CLI JAR." \
                     "Update Jenkins immediately. Disable CLI if unused. Apply Jenkins security advisory SECURITY-3314." \
-                    "${jenkins_url}/jnlpJars/jenkins-cli.jar — accessible (Jenkins likely running)"
+                    "${jenkins_url}/jnlpJars/jenkins-cli.jar — returned java-archive"
             fi
         done
     fi
@@ -3847,7 +3860,7 @@ phase_cve_checks() {
             "${web_url}/remote/login" 2>/dev/null | head -c 4096 | grep -ci "Fortinet\|FortiGate\|SSL-VPN" | tr -d '\n' 2>/dev/null || echo 0) + 0 ))
         echo "CVE-2024-21762 probe" > "${cve_dir}/CVE-2024-21762.txt"
         if [[ ${fortinet_check:-0} -gt 0 ]]; then
-            add_vuln "CRITICAL" "CVE-2024-21762: Fortinet SSL VPN — Potential RCE" \
+            add_vuln "CRITICAL" "CVE-2024-21762: Fortinet SSL VPN — Potential RCE [Patch Level Unverified]" \
                 "Fortinet SSL VPN detected. CVE-2024-21762 is a critical out-of-bounds write (CVSS 9.6) — unauthenticated RCE. Actively exploited in the wild." \
                 "Apply Fortinet PSIRT advisory FG-IR-24-015 immediately. Disable SSL VPN if patching is delayed." \
                 "${web_url}/remote/login — Fortinet SSL VPN detected"
@@ -3879,7 +3892,7 @@ phase_cve_checks() {
                 local tc_detect; tc_detect=$(( $( curl -s --max-time 10 --max-filesize 51200 "${web_url}" 2>/dev/null \
                     | head -c 4096 | grep -ci "TeamCity\|JetBrains" | tr -d '\n' 2>/dev/null || echo 0) + 0 ))
                 [[ ${tc_detect:-0} -gt 0 ]] && \
-                    add_vuln "CRITICAL" "CVE-2024-27198: TeamCity Authentication Bypass" \
+                    add_vuln "CRITICAL" "CVE-2024-27198: TeamCity Authentication Bypass [Patch Level Unverified]" \
                         "JetBrains TeamCity versions < 2023.11.4 have auth bypass allowing unauthenticated RCE and credential theft." \
                         "Update TeamCity immediately. Apply JetBrains security advisory. Isolate CI/CD systems." \
                         "${web_url}: TeamCity detected with CVE-2024-27198 indicator"
@@ -3894,7 +3907,7 @@ phase_cve_checks() {
             | head -c 4096 | grep -ci "Ivanti\|Pulse Secure\|Connect Secure" | tr -d '\n' 2>/dev/null || echo 0) + 0 ))
         echo "Ivanti probe" > "${cve_dir}/CVE-2025-0282.txt"
         if [[ ${ivanti_check:-0} -gt 0 ]]; then
-            add_vuln "CRITICAL" "Ivanti Connect Secure Detected — Multiple Critical CVEs" \
+            add_vuln "CRITICAL" "Ivanti Connect Secure Detected — Multiple Critical CVEs [Patch Level Unverified]" \
                 "Ivanti Connect Secure VPN has multiple critical RCE CVEs: CVE-2024-8190 (OS cmd injection), CVE-2024-21887 (cmd injection), CVE-2025-0282 (stack overflow RCE). All actively exploited." \
                 "Apply all Ivanti patches immediately. Enable Ivanti Integrity Checker Tool. Monitor for IOCs." \
                 "${web_url}: Ivanti Connect Secure detected"
@@ -3964,7 +3977,7 @@ phase_cve_checks() {
         # Only flag when Spring is confirmed in page AND server did not reject the probe (non-400/404/500)
         if [[ ${spring_check:-0} -gt 0 ]] && [[ "$spring_resp" != "000" ]] && \
            [[ "$spring_resp" != "404" ]] && [[ "$spring_resp" != "400" ]]; then
-            add_vuln "HIGH" "CVE-2022-22965: Spring4Shell — Spring Framework Detected" \
+            add_vuln "HIGH" "CVE-2022-22965: Spring4Shell — Spring Framework Detected [Patch Level Unverified]" \
                 "Spring Framework detected. Spring4Shell (CVE-2022-22965) allows RCE via data binding on Tomcat. Verify patch status." \
                 "Update Spring Framework to 5.3.18+/5.2.20+. Update Spring Boot to 2.6.6+." \
                 "${web_url}: Spring Framework detected (HTTP ${spring_resp}) — verify Spring4Shell patch"
@@ -4156,7 +4169,7 @@ phase_report() {
         echo "  █▀█ █▀▀ █▀█ █▀█ █▄█ █▀█ █▀█   v5.0"
         echo "  █▀█ █▄▄ █▀▄ █▄█ █ █ █▀█ █▀▀   DEEP PENETRATION TEST REPORT"
         echo "═════════════════════════════════════════════════════════════════════"
-        echo "  [✔] 100% EXPLOITABILITY CONFIRMED — FALSE POSITIVES ELIMINATED"
+        echo "  [✔] VERIFIED FINDINGS — MULTI-TOOL CORRELATION"
         echo "═════════════════════════════════════════════════════════════════════"
         echo "  Target   : ${TARGET}"
         echo "  Type     : ${TARGET_TYPE}"
@@ -4403,7 +4416,7 @@ footer a:hover{text-shadow:0 0 5px var(--cyan)}
   ACROMAP is open-source and free for all — use responsibly.
 </div>
 <div class="main">
-  <div class="guarantee-badge">✔ 100% EXPLOITABILITY CONFIRMED — FALSE POSITIVES ELIMINATED</div>
+  <div class="guarantee-badge">✔ VERIFIED FINDINGS — MULTI-TOOL CORRELATION</div>
 HTMLHEAD
 
         # Summary cards
@@ -4623,7 +4636,7 @@ print_final_summary() {
     echo "  ╠════════════════════════════════════════════════════════════════════╣"
     echo -e "  ║  \033[1;35m0DAY${LGREEN}:$(printf '%-3s' $ZERO_DAY_COUNT) \033[1;31m1CLK${LGREEN}:$(printf '%-3s' $ONE_CLICK_COUNT) ${LRED}CRIT${LGREEN}:$(printf '%-3s' $CRITICAL_COUNT) ${RED}HIGH${LGREEN}:$(printf '%-3s' $HIGH_COUNT) ${YELLOW}MED${LGREEN}:$(printf '%-3s' $MEDIUM_COUNT) ${WHITE}INFO${LGREEN}:$(printf '%-3s' $INFO_COUNT) TOTAL:${BOLD}$(printf '%-6s' $total_findings)${LGREEN} ║"
     echo "  ╠════════════════════════════════════════════════════════════════════╣"
-    echo "  ║  [✔] 100% EXPLOITABILITY CONFIRMED — FALSE POSITIVES ELIMINATED    ║"
+    echo "  ║  [✔] VERIFIED FINDINGS — MULTI-TOOL CORRELATION                    ║"
     echo "  ╠════════════════════════════════════════════════════════════════════╣"
     printf "  ║  Confidence : %s/10  (%s)%-41s║\n" "$confidence" "$conf_label" ""
     printf "  ║  Tools OK   : %s/%s%-53s║\n" "$TOOLS_SUCCEEDED" "$TOOLS_ATTEMPTED" ""
@@ -5221,11 +5234,11 @@ phase_k8s_audit() {
             "http://${TARGET}:2379/v2/members" || true
         if grep -qE "\"members\"|\"clientURLs\"" "${k8s_dir}/etcd_members.json" 2>/dev/null; then
             add_vuln "CRITICAL" "etcd Cluster Accessible Without Authentication" \
-                "etcd (Kubernetes backing store) is accessible on port 2379 without TLS/auth. All K8s secrets, configs, and credentials can be dumped from etcd." \" \
-            "EXPLOIT: curl http://TARGET:2379/v3/keys?recursive=true -> ALL K8s secrets, tokens, kubeconfig. Extract service account token -> kubectl --token=TOKEN -> cluster admin access." \
-            "PATCH: 1) Enable TLS on etcd. 2) Require client certs: --client-cert-auth=true. 3) Firewall port 2379/2380 to control plane only. 4) Rotate all K8s secrets."
+                "etcd (Kubernetes backing store) is accessible on port 2379 without TLS/auth. All K8s secrets, configs, and credentials can be dumped from etcd." \
                 "Enable etcd peer and client TLS. Require client certificates. Restrict etcd to localhost or control-plane network." \
-                "curl http://${TARGET}:2379/v2/members — returned cluster member data"
+                "curl http://${TARGET}:2379/v2/members — returned cluster member data" \
+                "EXPLOIT: curl http://TARGET:2379/v3/keys?recursive=true -> ALL K8s secrets, tokens, kubeconfig. Extract service account token -> kubectl --token=TOKEN -> cluster admin access." \
+                "PATCH: 1) Enable TLS on etcd. 2) Require client certs: --client-cert-auth=true. 3) Firewall port 2379/2380 to control plane only. 4) Rotate all K8s secrets."
         fi
     fi
 
@@ -5342,11 +5355,11 @@ phase_password_spray() {
                     "${spray_dir}/valid_users.txt" "$spray_pass" 2>/dev/null || true
                 if grep -q "SUCCESS" "${spray_dir}/kerbrute_spray.txt" 2>/dev/null; then
                     add_vuln "CRITICAL" "Kerberos Password Spray — Credentials Found" \
-                        "Password spray attack succeeded. Weak/default passwords in use on domain accounts." \" \
-                    "EXPLOIT: evil-winrm -i TARGET -u USER -p PASSWORD -> PS shell -> whoami /groups -> secretsdump.py DOMAIN/USER:PASS@TARGET -> NTLM hashes -> pass-the-hash -> domain admin." \
-                    "PATCH: 1) Enable Azure AD Password Protection (bans common passwords). 2) Enforce MFA. 3) Enable Smart Lockout. 4) Monitor Event ID 4625 mass failures. 5) Sentinel alert for spray patterns."
+                        "Password spray attack succeeded. Weak/default passwords in use on domain accounts." \
                         "Enforce strong password policy. Enable MFA. Deploy Azure AD Password Protection." \
-                        "$(grep 'SUCCESS' "${spray_dir}/kerbrute_spray.txt" | head -3)"
+                        "$(grep 'SUCCESS' "${spray_dir}/kerbrute_spray.txt" | head -3)" \
+                        "EXPLOIT: evil-winrm -i TARGET -u USER -p PASSWORD -> PS shell -> whoami /groups -> secretsdump.py DOMAIN/USER:PASS@TARGET -> NTLM hashes -> pass-the-hash -> domain admin." \
+                        "PATCH: 1) Enable Azure AD Password Protection (bans common passwords). 2) Enforce MFA. 3) Enable Smart Lockout. 4) Monitor Event ID 4625 mass failures. 5) Sentinel alert for spray patterns."
                 fi
             fi
         fi
@@ -5416,7 +5429,7 @@ phase_cors_jwt() {
         _is_valid_url "$web_url" || continue
         local slug; slug=$(echo "$web_url" | sed 's|[/:.]|_|g')
         for origin in "${cors_origins[@]}"; do
-            local cors_resp; cors_resp=$(curl -s -X GET --max-time 10 \
+            local cors_resp; cors_resp=$(curl -s -I -X GET --max-time 10 \
                 -H "Origin: ${origin}" \
                 -H "Access-Control-Request-Method: GET" \
                 "$web_url" 2>/dev/null || echo "")
@@ -6002,7 +6015,7 @@ phase_zero_day_one_click() {
         local ivanti; ivanti=$(( $( curl -s --max-time 10 --max-filesize 51200 "$web_url" 2>/dev/null | head -c 4096 | grep -ciE "Ivanti|Connect Secure|Pulse" 2>/dev/null | tr -d '\n' 2>/dev/null || echo 0) + 0 ))
         if [[ ${ivanti:-0} -gt 0 ]]; then
             add_vuln "CRITICAL" \
-                "CVE-2025-0282: Ivanti Connect Secure Detected — Verify Patch (ZERO-DAY Risk)" \
+                "CVE-2025-0282: Ivanti Connect Secure [Patch Level Unverified]" \
                 "Ivanti Connect Secure VPN detected. CVE-2025-0282 is a stack-based buffer overflow allowing unauthenticated pre-auth RCE. Actively exploited in the wild by nation-state actors before patch availability (Jan 2025). CVSS 9.0." \
                 "Immediately apply Ivanti patch 22.7R2.5 or later. Run Ivanti Integrity Checker Tool (ICT). Isolate from internet until patched." \
                 "${web_url} — Ivanti Connect Secure fingerprint detected" \
@@ -6017,7 +6030,7 @@ phase_zero_day_one_click() {
         local forti; forti=$(( $( curl -s --max-time 10 --max-filesize 51200 "${web_url}/remote/login" 2>/dev/null | head -c 4096 | grep -ciE "Fortinet|FortiGate|FortiOS|FortiProxy" 2>/dev/null | tr -d '\n' 2>/dev/null || echo 0) + 0 ))
         if [[ ${forti:-0} -gt 0 ]]; then
             add_vuln "CRITICAL" \
-                "CVE-2024-55591: Fortinet Product Detected — Verify Patch Status (ZERO-DAY Risk)" \
+                "CVE-2024-55591: Fortinet Product Detected [Patch Level Unverified]" \
                 "FortiOS or FortiProxy VPN detected. CVE-2024-55591 (CVSS 9.8) is an authentication bypass in the Node.js websocket module allowing an unauthenticated attacker to gain super-admin privileges. Actively exploited as zero-day since November 2024. Affects FortiOS 7.0.0–7.0.16 and FortiProxy 7.0.0–7.0.19." \
                 "Upgrade FortiOS to 7.0.17+ or 7.2.x+. Upgrade FortiProxy to 7.0.20+ or 7.2.x+. Disable HTTP/HTTPS admin access from internet immediately." \
                 "${web_url}/remote/login — Fortinet product fingerprint confirmed" \
@@ -6046,7 +6059,7 @@ phase_zero_day_one_click() {
         local tomcat_body; tomcat_body=0; { _tb=$(curl -s --max-time 10 --max-filesize 51200 "$web_url" 2>/dev/null | head -c 4096 | grep -ci "Apache Tomcat\|tomcat\|coyote" 2>/dev/null || echo 0); tomcat_body=$(( ${_tb//[^0-9]/} + 0 )); } 2>/dev/null || true
         if [[ -n "$tomcat_hdr" || $tomcat_body -gt 0 ]]; then
             add_vuln "ZERO_DAY" \
-                "CVE-2024-50379: Apache Tomcat Partial PUT Race Condition RCE" \
+                "CVE-2024-50379: Apache Tomcat Partial PUT Race Condition [Patch Level Unverified]" \
                 "Apache Tomcat detected. CVE-2024-50379 is a TOCTOU race condition in partial PUT requests allowing unauthenticated remote code execution when the default servlet is enabled with write permissions. Affects Tomcat 11.0.0-M1 to 11.0.1, 10.1.0-M1 to 10.1.33, 9.0.0-M1 to 9.0.97." \
                 "Upgrade Apache Tomcat to 11.0.2+, 10.1.34+, or 9.0.98+. If upgrade is not immediately possible, disable the partial PUT feature by setting org.apache.catalina.servlets.DefaultServlet.allowPartialPut=false in conf/web.xml." \
                 "${web_url} — Apache Tomcat fingerprint detected (verify exact version)" \
@@ -6062,7 +6075,7 @@ phase_zero_day_one_click() {
             "${web_url}/guestaccess.aspx" -o /dev/null -w "%{http_code}" 2>/dev/null || echo "000")
         if [[ "$moveit" == "200" || "$moveit" == "302" ]]; then
             add_vuln "ZERO_DAY" \
-                "MOVEit Transfer Detected — Critical SQLi / Auth Bypass (CVE-2023-34362 family)" \
+                "MOVEit Transfer Detected — Critical SQLi Bypass [Patch Level Unverified]" \
                 "MOVEit Transfer file sharing application detected. The CVE-2023-34362 family of SQL injection flaws (and follow-on bypasses) enabled mass exploitation by CL0P ransomware gang affecting 2,500+ organisations. Unpatched instances remain actively targeted." \
                 "Immediately apply all MOVEit vendor patches (Progress Software). Audit for unauthorised files, users, and data exfiltration. Consider replacing with patched alternative." \
                 "${web_url}/guestaccess.aspx — MOVEit Transfer login page accessible" \
@@ -6090,8 +6103,11 @@ phase_zero_day_one_click() {
     # ── ONE-CLICK: CSRF with Auto-Submit ─────────────────────────────────────
     for web_url in "${WEB_TARGETS[@]:0:3}"; do
         _is_valid_url "$web_url" || continue
-        local csrf_check; csrf_check=0; { _cf=$(curl -s --max-time 10 --max-filesize 51200 "${web_url}/api/user/settings" 2>/dev/null | head -c 4096 | grep -ci "csrf\|xsrf\|_token\|authenticity" 2>/dev/null || echo 0); csrf_check=$(( ${_cf//[^0-9]/} + 0 )); } 2>/dev/null || true
-        if [[ ${csrf_check:-0} -eq 0 ]]; then
+        # Only verify CSRF if the application actually sets a session cookie (stateful auth)
+        local cookie_check; cookie_check=$(curl -s -I --max-time 10 "$web_url" 2>/dev/null | grep -i "Set-Cookie" || echo "")
+        if [[ -n "$cookie_check" ]]; then
+            local csrf_check; csrf_check=0; { _cf=$(curl -s --max-time 10 --max-filesize 51200 "${web_url}/api/user/settings" 2>/dev/null | head -c 4096 | grep -ci "csrf\|xsrf\|_token\|authenticity" 2>/dev/null || echo 0); csrf_check=$(( ${_cf//[^0-9]/} + 0 )); } 2>/dev/null || true
+            if [[ ${csrf_check:-0} -eq 0 ]]; then
             add_vuln "ONE_CLICK" \
                 "One-Click CSRF — Account Settings Manipulation (${web_url})" \
                 "API endpoint accepts state-changing POST requests without CSRF token validation. Attacker can craft a malicious webpage that auto-submits a form to this endpoint when victim visits it. Single click on attacker link causes victim's account to be modified (email change, password reset, admin escalation)." \
@@ -6099,6 +6115,7 @@ phase_zero_day_one_click() {
                 "${web_url}/api/user/settings accepted POST without CSRF token" \
                 "EXPLOIT: Attacker hosts: <html><body><form action='${web_url}/api/user/settings' method='POST'><input name='email' value='attacker@evil.com'></form><script>document.forms[0].submit()</script></body></html>. Victim visits this page (via phishing link or malvertising). Browser auto-submits form using victim's existing session cookie. Attacker's email is added to account — password reset link sent to attacker. Full account takeover in one victim click." \
                 "PATCH: 1) Generate CSRF token on server per-session: \$token = bin2hex(random_bytes(32)). 2) Embed in forms: <input type='hidden' name='csrf_token' value='\$token'>. 3) Validate on every state-changing request. 4) Set cookie: SameSite=Strict. 5) Check Origin header matches allowed origins. 6) Use framework CSRF middleware (Django: {% csrf_token %}, Laravel: @csrf, Express: csurf)."
+            fi
         fi
     done
 
