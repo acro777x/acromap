@@ -1,0 +1,87 @@
+<svg width="1200" height="400" xmlns="http://www.w3.org/2000/svg">
+
+<!-- BACKGROUND -->
+<rect width="100%" height="100%" fill="#000000"/>
+
+<!-- MATRIX RAIN -->
+<g fill="#00ff88" font-family="monospace" font-size="14" opacity="0.2">
+  <text x="100" y="0">
+    0101010101010101
+    <animate attributeName="y" from="0" to="400" dur="4s" repeatCount="indefinite"/>
+  </text>
+  <text x="300" y="-200">
+    1100101010110101
+    <animate attributeName="y" from="-200" to="400" dur="5s" repeatCount="indefinite"/>
+  </text>
+  <text x="700" y="-100">
+    1010101110101010
+    <animate attributeName="y" from="-100" to="400" dur="3.5s" repeatCount="indefinite"/>
+  </text>
+</g>
+
+<!-- RADAR SCAN LINE -->
+<rect x="0" y="0" width="1200" height="2" fill="#00ff88" opacity="0.5">
+  <animate attributeName="y" from="0" to="400" dur="2s" repeatCount="indefinite"/>
+</rect>
+
+<!-- TITLE -->
+<text x="50%" y="140" text-anchor="middle"
+      font-family="monospace"
+      font-size="60"
+      fill="#00ff88">
+  ACROMAP v5.0
+</text>
+
+<!-- TYPING EFFECT -->
+<text x="50%" y="200" text-anchor="middle"
+      font-family="monospace"
+      font-size="18"
+      fill="#00ffaa">
+
+  <tspan>
+    Initializing Framework...
+    <animate attributeName="opacity"
+             values="0;1"
+             dur="2s"
+             fill="freeze"/>
+  </tspan>
+
+</text>
+
+<!-- BLINKING CURSOR -->
+<rect x="760" y="185" width="10" height="20" fill="#00ff88">
+  <animate attributeName="opacity"
+           values="1;0;1"
+           dur="1s"
+           repeatCount="indefinite"/>
+</rect>
+
+<!-- FAKE IP SCANNING -->
+<text x="50%" y="250" text-anchor="middle"
+      font-family="monospace"
+      font-size="16"
+      fill="#00ff88">
+
+  Scanning 192.168.0.1 ...
+  <animate attributeName="opacity"
+           values="0;1;0"
+           dur="3s"
+           repeatCount="indefinite"/>
+</text>
+
+<!-- RED TEAM MODE TOGGLE -->
+<text x="50%" y="320" text-anchor="middle"
+      font-family="monospace"
+      font-size="16">
+
+  <tspan fill="#00ff88">
+    MODE: STEALTH
+    <animate attributeName="fill"
+             values="#00ff88;#ff0033;#00ff88"
+             dur="4s"
+             repeatCount="indefinite"/>
+  </tspan>
+
+</text>
+
+</svg>
