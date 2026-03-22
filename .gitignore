@@ -1,0 +1,9 @@
+# Scan output directories
+acromap_*/
+*.log
+checkpoint.txt
+.acromap_*
+
+# OS files
+.DS_Store
+Thumbs.db
