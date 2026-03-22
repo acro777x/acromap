@@ -1,4 +1,4 @@
-# Create this file in your repo
+
 # Changelog
 
 ## [v5.0] - 2026-03-22
