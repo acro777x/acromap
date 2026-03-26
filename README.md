@@ -305,7 +305,7 @@ A `checkpoint.txt` file is written after every phase. On resume, all completed p
 This tool is released **free and open source** for the security community. It is intended **solely** for:
 
 - Authorized penetration testing on systems you **own or have explicit written permission** to test
-- CTF / lab environments (TryHackMe, HackTheBox, GBU CSPL)
+- CTF / lab environments (TryHackMe, HackTheBox,  CSPL)
 - Academic and educational security research
 
 **Unauthorized use is illegal** under the Computer Fraud and Abuse Act (CFAA), UK Computer Misuse Act, IT Act 2000 (India), and equivalent laws worldwide. The author bears **no responsibility** for illegal or malicious use. By running this tool you accept **full legal responsibility** for your actions.
