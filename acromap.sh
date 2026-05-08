@@ -1143,111 +1143,136 @@ phase_setup() {
                 fi
             fi
 
+            # ── [HARDENED] apt lock-file detection ─────────────────────────────
+            _wait_for_apt_lock() {
+                local _count=0
+                while fuser /var/lib/dpkg/lock-frontend /var/lib/apt/lists/lock &>/dev/null; do
+                    if (( _count >= 30 )); then log_warn "apt is locked by another process. Proceeding anyway (may fail)..."; break; fi
+                    _spinner_tick "waiting for apt lock (${_count}s)"
+                    sleep 1
+                    (( _count++ ))
+                done
+            }
+
+            # ── [HARDENED] apt install helper ──────────────────────────────────
+            _apt_install() {
+                local pkg="$1" is_core="${2:-false}"
+                local _timeout=90; [[ "$is_core" == true ]] && _timeout=180
+                _wait_for_apt_lock
+                _spinner_start "apt install ${pkg}"
+                if DEBIAN_FRONTEND=noninteractive timeout "$_timeout" apt-get install -y -qq "$pkg" &>/dev/null 2>&1; then
+                    _spinner_stop 2>/dev/null || true
+                    printf "  \033[32m[✓]\033[0m %s installed\n" "$pkg"
+                    return 0
+                else
+                    _spinner_stop 2>/dev/null || true
+                    # Retry once after update
+                    log_warn "${pkg} failed. Retrying after update..."
+                    DEBIAN_FRONTEND=noninteractive timeout 60 apt-get update -qq &>/dev/null 2>&1 || true
+                    if DEBIAN_FRONTEND=noninteractive timeout "$_timeout" apt-get install -y -qq "$pkg" &>/dev/null 2>&1; then
+                        printf "  \033[32m✓\033[0m %s installed (retry)\n" "$pkg"
+                        return 0
+                    fi
+                fi
+                [[ "$is_core" == true ]] && log_error "CRITICAL: ${pkg} installation failed!"
+                return 1
+            }
+
             # Helper: install a Go tool and symlink to /usr/local/bin for PATH availability
             _go_install() {
-                local name="$1" repo="$2"
+                local name="$1" repo="$2" is_core="${3:-false}"
                 if ! command -v go &>/dev/null; then
                     echo -e "  ${RED}[✗] go not available — skip ${name}${NC}"
                     return 1
                 fi
-                # spinner_start already shows this
                 local _go_exit=0
+                local _timeout=120; [[ "$is_core" == true ]] && _timeout=300
                 _spinner_start "go install ${name}"
-                timeout 120 bash -c "GOPATH=\"$(go env GOPATH)\" go install '${repo}'" 2>/dev/null                     || _go_exit=$?
+                timeout "$_timeout" bash -c "GOPATH=\"$(go env GOPATH)\" go install '${repo}'" 2>/dev/null || _go_exit=$?
                 if [[ ${_go_exit:-0} -eq 0 ]]; then
                     local gobin="${GOPATH_BIN:-$(go env GOPATH)/bin}"
                     local binname; binname=$(basename "${repo%%@*}")
-                    [[ -f "${gobin}/${binname}" ]] &&                         ln -sf "${gobin}/${binname}" "/usr/local/bin/${binname}" 2>/dev/null || true
-                    printf "  \033[32m✓\033[0m done\n"
+                    [[ -f "${gobin}/${binname}" ]] && ln -sf "${gobin}/${binname}" "/usr/local/bin/${binname}" 2>/dev/null || true
+                    _spinner_stop 2>/dev/null
+                    printf "  \033[32m✓\033[0m %s done\n" "$name"
                     return 0
                 elif [[ $_go_exit -eq 124 ]]; then
-                    echo -e "${YELLOW}timeout — skipped (internet slow; install manually later)${NC}"
+                    _spinner_stop 2>/dev/null
+                    log_warn "${name} timed out after ${_timeout}s. Mirror might be slow."
                     return 1
                 else
-                    echo -e "${RED}failed (exit ${_go_exit})${NC}"
+                    _spinner_stop 2>/dev/null
+                    log_warn "${name} failed (exit ${_go_exit})."
                     return 1
                 fi
             }
 
             for pkg in "${MISSING[@]}"; do
                 case "$pkg" in
-                    # ── apt-only tools ───────────────────────────────────
-                    jq|masscan|nikto|gobuster|ffuf|dirb|whatweb|wafw00f|\
-                    sslscan|whois|curl|wget|git|python3|python3-pip|netcat-openbsd|\
+                    # ── CORE Tools (Critical) ─────────────────────────────
+                    nmap)         _apt_install "nmap" true ;;
+                    httpx)        _apt_install "httpx-toolkit" true || _go_install "httpx" "github.com/projectdiscovery/httpx/cmd/httpx@latest" true ;;
+                    nuclei)       _apt_install "nuclei" true || _go_install "nuclei" "github.com/projectdiscovery/nuclei/v3/cmd/nuclei@latest" true ;;
+                    jq)           _apt_install "jq" true ;;
+                    python3-pip)  _apt_install "python3-pip" true ;;
+
+                    # ── Standard apt tools ───────────────────────────────────
+                    masscan|nikto|gobuster|ffuf|dirb|whatweb|wafw00f|\
+                    sslscan|whois|curl|wget|git|python3|netcat-openbsd|\
                     dnsutils|dnsenum|enum4linux|smbclient|onesixtyone|\
                     sqlmap|hydra|wpscan|sublist3r|\
                     wfuzz|impacket-scripts|\
                     evil-winrm|bloodhound)
-                        _spinner_start "apt install ${pkg}"
-                        if DEBIAN_FRONTEND=noninteractive timeout 90 apt-get install -y -qq "$pkg" &>/dev/null 2>&1; then
-                            _spinner_stop 2>/dev/null || true
-                            printf "  \033[32m[✓]\033[0m %s installed\n" "$pkg"
-                        else
-                            _spinner_stop 2>/dev/null || true
-                            echo -e "  ${RED}✗ ${pkg} — trying fallback...${NC}"
-                            # Try apt-get update once then retry
-                            DEBIAN_FRONTEND=noninteractive timeout 30 apt-get update -qq &>/dev/null 2>&1 || true
-                            if DEBIAN_FRONTEND=noninteractive timeout 90 apt-get install -y -qq "$pkg" &>/dev/null 2>&1; then
-                                printf "  \033[32m✓\033[0m %s installed (retry)\n" "$pkg"
-                            else
-                                printf "  \033[33m⚠\033[0m %s skipped\n" "$pkg"
-                            fi
-                        fi ;;
+                        _apt_install "$pkg" false ;;
 
                     snmp|snmp-mibs-downloader)
-                        _spinner_start "installing snmp"
-                        DEBIAN_FRONTEND=noninteractive timeout 90 apt-get install -y -qq                             snmp snmp-mibs-downloader &>/dev/null 2>&1 ||                         DEBIAN_FRONTEND=noninteractive timeout 90 apt-get install -y -qq snmp &>/dev/null 2>&1 || true
-                        _spinner_stop 2>/dev/null || true
+                        _apt_install "snmp" false
                         if command -v snmpwalk &>/dev/null; then
-                            # Enable all MIBs so snmpwalk works without errors
                             sed -i 's/^mibs :/# mibs :/' /etc/snmp/snmp.conf 2>/dev/null || true
-                            echo -e "  ${LGREEN}✓ snmp installed + MIBs enabled${NC}"
-                        else
-                            echo -e "  ${YELLOW}⚠ snmp optional — install: apt install snmp${NC}"
                         fi ;;
 
-                    # ── CRITICAL tools — must not be skipped ─────────────────
-                    nmap)
-                                                printf "  \033[2m[apt]\033[0m nmap... "
-                        local _nmap_ok=false
-                        # Try apt first
-                        DEBIAN_FRONTEND=noninteractive timeout 120 apt-get install -y nmap &>/dev/null 2>&1                             && _nmap_ok=true
-                        # Try apt-get install --fix-broken if above failed
-                        if [[ "$_nmap_ok" == false ]]; then
-                            DEBIAN_FRONTEND=noninteractive apt-get install -f -y &>/dev/null 2>&1 || true
-                            DEBIAN_FRONTEND=noninteractive timeout 120 apt-get install -y nmap &>/dev/null 2>&1                                 && _nmap_ok=true
-                        fi
-                        # Download .deb from Kali repo as last resort
-                        if [[ "$_nmap_ok" == false ]]; then
-                            local _nm_deb
-                            _nm_deb=$(curl -s --max-time 10                                 "https://api.github.com/repos/nmap/nmap/releases/latest"                                 2>/dev/null | grep "browser_download_url.*linux.*x86_64"                                 | head -1 | cut -d'"' -f4 || echo "")
-                            [[ -n "$_nm_deb" ]] &&                                 curl -sL --max-time 90 "$_nm_deb" -o /tmp/nmap_pkg 2>/dev/null &&                                 dpkg -i /tmp/nmap_pkg &>/dev/null 2>&1 && _nmap_ok=true || true
-                        fi
-                        printf "\033[32mdone\033[0m\n"
-                        if [[ "$_nmap_ok" == true ]]; then
-                            echo -e "  ${LGREEN}✓ nmap installed (CRITICAL)${NC}"
-                        else
-                            echo -e "  ${LRED}✗ nmap FAILED — port scanning will be very limited!${NC}"
-                            echo -e "  ${YELLOW}  Manual fix: apt-get update && apt-get install -y nmap${NC}"
-                        fi ;;
-
-                    # ── pip3 first, apt fallback ─────────────────────────────
-                    droopescan|xsstrike)
-                        if { timeout 120 pip3 install "$pkg" --break-system-packages -q 2>/dev/null; };  then
-                            printf "  \033[32m✓\033[0m %s installed\n" "$pkg"
-                        elif DEBIAN_FRONTEND=noninteractive timeout 90 apt-get install -y -qq "$pkg" &>/dev/null 2>&1; then
+                    # ── Pip tools ──────────────────────────────────────────
+                    droopescan|xsstrike|sslyze|arjun|commix|theharvester|certipy-ad|ldapdomaindump)
+                        _spinner_start "pip install ${pkg}"
+                        if timeout 120 pip3 install "$pkg" --break-system-packages -q 2>/dev/null; then
+                            _spinner_stop 2>/dev/null
                             printf "  \033[32m✓\033[0m %s installed\n" "$pkg"
                         else
-                            echo -e "  ${YELLOW}⚠ ${pkg} optional${NC}"
+                            _spinner_stop 2>/dev/null
+                            _apt_install "$pkg" false || true
                         fi ;;
 
-                    cmseek)
-                        if DEBIAN_FRONTEND=noninteractive timeout 90 apt-get install -y -qq cmseek &>/dev/null 2>&1; then
-                            echo -e "  ${LGREEN}✓ cmseek installed${NC}"
-                        elif timeout 60 pip3 install cmseek --break-system-packages -q 2>/dev/null; then
-                            echo -e "  ${LGREEN}✓ cmseek installed${NC}"
-                        else
-                            # Clone from GitHub (pip package is often broken)
+                    impacket-GetUserSPNs|impacket-GetNPUsers)
+                        _apt_install "impacket-scripts" false || timeout 120 pip3 install impacket --break-system-packages -q 2>/dev/null
+                        for _sc in GetUserSPNs.py GetNPUsers.py secretsdump.py psexec.py; do
+                            local _sf; _sf=$(find /usr /root ~/.local /opt -name "$_sc" -type f 2>/dev/null | head -1)
+                            [[ -n "$_sf" ]] && ln -sf "$_sf" "/usr/local/bin/${_sc}" 2>/dev/null && ln -sf "$_sf" "/usr/local/bin/${_sc%.py}" 2>/dev/null || true
+                        done ;;
+
+                    # ── Go tools ───────────────────────────────────────────
+                    subfinder)  _apt_install "subfinder" false || _go_install "subfinder" "github.com/projectdiscovery/subfinder/v2/cmd/subfinder@latest" ;;
+                    dnsx)       _apt_install "dnsx" false || _go_install "dnsx" "github.com/projectdiscovery/dnsx/cmd/dnsx@latest" ;;
+                    amass)      _apt_install "amass" false || _go_install "amass" "github.com/owasp-amass/amass/v4/cmd/amass@latest" ;;
+                    katana)     _apt_install "katana" false || _go_install "katana" "github.com/projectdiscovery/katana/cmd/katana@latest" ;;
+                    gau)        _apt_install "gau" false || _go_install "gau" "github.com/lc/gau/v2/cmd/gau@latest" ;;
+                    waybackurls)_apt_install "waybackurls" false || _go_install "waybackurls" "github.com/tomnomnom/waybackurls@latest" ;;
+                    dalfox)     _apt_install "dalfox" false || _go_install "dalfox" "github.com/hahwul/dalfox/v2@latest" ;;
+                    hakrawler)  _apt_install "hakrawler" false || _go_install "hakrawler" "github.com/hakluke/hakrawler@latest" ;;
+                    gf)         _apt_install "gf" false || _go_install "gf" "github.com/tomnomnom/gf@latest" ;;
+
+                    rustscan)
+                        _apt_install "rustscan" false || {
+                            local _rs_deb; _rs_deb=$(curl -s --max-time 15 "https://api.github.com/repos/RustScan/RustScan/releases/latest" 2>/dev/null | grep "browser_download_url.*amd64.deb" | head -1 | cut -d'"' -f4 || echo "")
+                            if [[ -n "$_rs_deb" ]]; then
+                                curl -sL --max-time 60 "$_rs_deb" -o /tmp/rustscan.deb 2>/dev/null && DEBIAN_FRONTEND=noninteractive dpkg -i /tmp/rustscan.deb &>/dev/null 2>&1
+                            fi
+                        } ;;
+
+                    feroxbuster)
+                        _apt_install "feroxbuster" false || curl -sL --max-time 60 https://raw.githubusercontent.com/epi052/feroxbuster/main/install-nix.sh | bash &>/dev/null 2>&1 || true ;;
+
+                    trufflehog)
+                        _apt_install "trufflehog" false || curl -sL --max-time 60 "https://raw.githubusercontent.com/trufflesecurity/trufflehog/main/scripts/install.sh" 2>/dev/null | bash -s -- --bin-dir /usr/local/bin &>/dev/null 2>&1 || true ;;
                             timeout 60 git clone --quiet --depth 1                                 "https://github.com/Tuhinshubhra/CMSeeK"                                 /opt/cmseek 2>/dev/null &&                             printf "#!/bin/bash\npython3 /opt/cmseek/cmseek.py \"\$@\"\n"                                 > /usr/local/bin/cmseek &&                             chmod +x /usr/local/bin/cmseek &&                             echo -e "  ${LGREEN}✓ cmseek installed from git${NC}" ||                             echo -e "  ${YELLOW}⚠ cmseek optional — CMS detection still uses WhatWeb${NC}"
                         fi ;;
 
@@ -1346,28 +1371,6 @@ phase_setup() {
                         if DEBIAN_FRONTEND=noninteractive timeout 90 apt-get install -y -qq dnsx &>/dev/null 2>&1; then
                             printf "  \033[32m✓\033[0m installed via apt\n"
                         else
-                            _go_install dnsx "github.com/projectdiscovery/dnsx/cmd/dnsx@latest" || true
-                        fi ;;
-
-
-                    amass)
-                        if DEBIAN_FRONTEND=noninteractive timeout 90 apt-get install -y -qq amass &>/dev/null 2>&1; then
-                            printf "  \033[32m✓\033[0m installed via apt\n"
-                        else
-                            _go_install amass "github.com/owasp-amass/amass/v4/cmd/amass@latest" || true
-                        fi ;;
-
-
-                    katana)
-                        if DEBIAN_FRONTEND=noninteractive timeout 90 apt-get install -y -qq katana &>/dev/null 2>&1; then
-                            printf "  \033[32m✓\033[0m installed via apt\n"
-                        else
-                            _go_install katana "github.com/projectdiscovery/katana/cmd/katana@latest" || true
-                        fi ;;
-
-
-                    gau)
-                        if DEBIAN_FRONTEND=noninteractive timeout 90 apt-get install -y -qq gau &>/dev/null 2>&1; then
                             printf "  \033[32m✓\033[0m installed via apt\n"
                         else
                             _go_install gau "github.com/lc/gau/v2/cmd/gau@latest" || true
@@ -1645,8 +1648,34 @@ phase_setup() {
         fi
     fi
 
-    echo ""
-    log_ok "Phase 0 complete. Tools found: ${#FOUND[@]} / ${#REQUIRED_TOOLS[@]}"
+    # ── [HARDENED] Core Dependency Verification (Existence Proof) ──────────────
+    local -a CORE_BINS=("nmap" "nuclei" "httpx" "python3" "jq")
+    local _missing_core=0
+    for b in "${CORE_BINS[@]}"; do
+        if ! command -v "$b" &>/dev/null; then
+            log_error "CRITICAL CORE TOOL MISSING: ${b}"
+            _missing_core=$(( _missing_core + 1 ))
+        fi
+    done
+
+    # Verify Internal Engines (Deterministic Behavioral Guard)
+    for eng in "nmap_parser.py" "web_parser.py" "preflight.sh"; do
+        if [[ ! -f "${SCRIPT_DIR}/${eng}" ]]; then
+            log_error "INTERNAL ENGINE MISSING: ${eng} (must be in script directory)"
+            _missing_core=$(( _missing_core + 1 ))
+        fi
+    done
+
+    if [[ $_missing_core -gt 0 ]]; then
+        echo ""
+        log_warn "FRAMEWORK DEGRADED: ${_missing_core} critical components are missing."
+        echo -e "  ${RED}The Aristotelian Hardening prevents the framework from running in a 'blind' state.${NC}"
+        echo -e "  ${CYAN}Please verify your installation or check your network connectivity.${NC}"
+        echo -e "  ${YELLOW}Tip: run 'bash qa_harness.sh' to diagnose issues.${NC}"
+        echo ""
+    fi
+
+    log_ok "Phase 0 Complete. Environment verified."
     PHASES_COMPLETED=$(( PHASES_COMPLETED + 1 ))
 }
 
@@ -2472,8 +2501,8 @@ phase_web_discovery() {
         [[ -z "$slug" ]] && continue
 
         # Headers
-        run_tool_timeout "curl-headers-${slug}" "${curl_dir}/headers_${slug}.txt" 20 \
-            curl -s -I -L --max-time 15 --connect-timeout 5 \
+        run_tool_timeout "curl-headers-${slug}" "${curl_dir}/headers_${slug}.txt" 30 \
+            curl -s -I -L --max-time 20 --connect-timeout 10 \
             -A "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36" \
             "$web_url" 2>/dev/null || true
 
@@ -2551,8 +2580,8 @@ phase_web_discovery() {
         fi
 
         # Page source
-        run_tool_timeout "curl-body-${slug}" "${curl_dir}/body_${slug}.html" 20 \
-            curl -s -L --max-time 15 --connect-timeout 5 \
+        run_tool_timeout "curl-body-${slug}" "${curl_dir}/body_${slug}.html" 30 \
+            curl -s -L --max-time 20 --connect-timeout 10 \
             -A "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36" \
             "$web_url" 2>/dev/null || true
 
@@ -2583,10 +2612,10 @@ phase_web_discovery() {
 
     # Wayback URLs
     if command -v waybackurls &>/dev/null; then
-        run_tool_timeout "waybackurls" "${OUTPUT_DIR}/curl/wayback_urls.txt" 60 \
+        run_tool_timeout "waybackurls" "${OUTPUT_DIR}/curl/wayback_urls.txt" 120 \
             waybackurls "$TARGET" 2>/dev/null || true
     elif command -v gau &>/dev/null; then
-        run_tool_timeout "gau" "${OUTPUT_DIR}/curl/gau_urls.txt" 60 \
+        run_tool_timeout "gau" "${OUTPUT_DIR}/curl/gau_urls.txt" 120 \
             gau "$TARGET" 2>/dev/null || true
     fi
 
@@ -2631,13 +2660,13 @@ phase_tech_fingerprint() {
 
         # whatweb (JSON output)
         if command -v whatweb &>/dev/null; then
-            run_tool_timeout "whatweb-${slug}" "${OUTPUT_DIR}/whatweb/whatweb_${slug}.txt" 30 \
+            run_tool_timeout "whatweb-${slug}" "${OUTPUT_DIR}/whatweb/whatweb_${slug}.txt" 60 \
                 whatweb --no-errors -a 3 --log-json="$ww_json" "$web_url" 2>/dev/null || true
         fi
 
         # WAF detection (JSON output)
         if command -v wafw00f &>/dev/null; then
-            run_tool_timeout "wafw00f-${slug}" "${OUTPUT_DIR}/wafw00f/wafw00f_${slug}.txt" 30 \
+            run_tool_timeout "wafw00f-${slug}" "${OUTPUT_DIR}/wafw00f/wafw00f_${slug}.txt" 60 \
                 wafw00f -a -o "$waf_json" "$web_url" 2>/dev/null || true
         fi
 
@@ -2720,11 +2749,14 @@ phase_ssl() {
     # Tool 1: sslyze
     if command -v sslyze &>/dev/null; then
         log_info "sslyze: scanning ${ssl_target}:${ssl_port}..."
-        local sslyze_t; sslyze_t=$(proxy_timeout 120)
-        run_tool_timeout "sslyze" "${ssl_dir}/sslyze.txt" "$sslyze_t" \
+        local sslyze_t; sslyze_t=$(proxy_timeout 180)
+        if run_tool_timeout "sslyze" "${ssl_dir}/sslyze.txt" "$sslyze_t" \
             sslyze --regular --json_out="${ssl_dir}/sslyze.json" \
-            "${ssl_target}:${ssl_port}" 2>/dev/null || true
-        [[ -s "${ssl_dir}/sslyze.json" || -s "${ssl_dir}/sslyze.txt" ]] && sslyze_ran=true
+            "${ssl_target}:${ssl_port}" 2>/dev/null; then
+            [[ -s "${ssl_dir}/sslyze.json" || -s "${ssl_dir}/sslyze.txt" ]] && sslyze_ran=true
+        else
+            log_warn "sslyze failed. Hostile environment or probe blocking detected."
+        fi
     fi
 
     # Tool 2: testssl.sh
