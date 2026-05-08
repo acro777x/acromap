@@ -6,6 +6,50 @@
 import json
 import sys
 import os
+import re
+
+def extract_json(raw_text):
+    """
+    Aristotelian Isolation:
+    Extracts the most likely JSON structure from a string that may contain
+    WAF-injected garbage or HTML.
+    """
+    # Attempt 1: Standard strip and parse
+    try:
+        return json.loads(raw_text.strip())
+    except:
+        pass
+
+    # Attempt 2: Greedy search for balanced brackets [...] or {...}
+    # This handles WAF block pages that prepend/append HTML
+    matches = []
+    # Find all potential starts
+    for start_char in ('[', '{'):
+        for m in re.finditer(re.escape(start_char), raw_text):
+            start_idx = m.start()
+            # Try to find matching closing bracket
+            end_char = ']' if start_char == '[' else '}'
+            stack = 0
+            for i in range(start_idx, len(raw_text)):
+                if raw_text[i] == start_char:
+                    stack += 1
+                elif raw_text[i] == end_char:
+                    stack -= 1
+                    if stack == 0:
+                        potential_json = raw_text[start_idx : i+1]
+                        try:
+                            matches.append(json.loads(potential_json))
+                        except:
+                            pass
+                        break
+    
+    # Return the largest list or dict found
+    if not matches:
+        return None
+    
+    # Sort by complexity (length of string representations)
+    matches.sort(key=lambda x: len(str(x)), reverse=True)
+    return matches[0]
 
 def parse_web_state(whatweb_file, wafw00f_file):
     techs = set()
@@ -22,18 +66,12 @@ def parse_web_state(whatweb_file, wafw00f_file):
             print("[WEB_PARSER] DEGRADED: EMPTY_WHATWEB — WhatWeb JSON is 0 bytes", file=sys.stderr)
         else:
             try:
-                with open(whatweb_file, 'r') as f:
-                    raw = f.read().strip()
-                    # Guard: WAFs sometimes inject HTML before JSON
-                    # Find first '[' or '{' to skip WAF garbage
-                    json_start = -1
-                    for i, c in enumerate(raw):
-                        if c in ('[', '{'):
-                            json_start = i
-                            break
-                    if json_start == -1:
-                        raise json.JSONDecodeError("No JSON structure found in file", raw, 0)
-                    data = json.loads(raw[json_start:])
+                with open(whatweb_file, 'r', encoding='utf-8', errors='ignore') as f:
+                    raw = f.read()
+                    data = extract_json(raw)
+                    
+                    if data is None:
+                        raise json.JSONDecodeError("No valid JSON structure found in file", raw, 0)
 
                     # whatweb --log-json outputs an array of objects
                     if isinstance(data, dict):
@@ -80,16 +118,12 @@ def parse_web_state(whatweb_file, wafw00f_file):
             print("[WEB_PARSER] DEGRADED: EMPTY_WAFW00F — Wafw00f JSON is 0 bytes", file=sys.stderr)
         else:
             try:
-                with open(wafw00f_file, 'r') as f:
-                    raw = f.read().strip()
-                    json_start = -1
-                    for i, c in enumerate(raw):
-                        if c in ('[', '{'):
-                            json_start = i
-                            break
-                    if json_start == -1:
+                with open(wafw00f_file, 'r', encoding='utf-8', errors='ignore') as f:
+                    raw = f.read()
+                    data = extract_json(raw)
+                    
+                    if data is None:
                         raise json.JSONDecodeError("No JSON structure in wafw00f output", raw, 0)
-                    data = json.loads(raw[json_start:])
 
                     if isinstance(data, list) and len(data) > 0:
                         for item in data:
@@ -141,8 +175,7 @@ def parse_web_state(whatweb_file, wafw00f_file):
             break
 
     # ── 4. Explicit State Degradation Export ──────────────────────────────────
-    # Determine overall failure state
-    parser_failed = whatweb_failed  # wafw00f failure is non-critical (preflight has WAF data)
+    parser_failed = whatweb_failed
     failure_reason = ""
     if whatweb_failed and wafw00f_failed:
         failure_reason = "WAF_CORRUPTION_BOTH"
@@ -158,11 +191,10 @@ def parse_web_state(whatweb_file, wafw00f_file):
     print(f"export WAF_NAME=\"{waf_name}\"")
     print(f"export WEB_SERVER=\"{web_server}\"")
     print(f"export DETECTED_TECHS_ARRAY=\"{' '.join(techs)}\"")
-    print(f"export NUCLEI_TAGS=\"{','.join(sorted(nuclei_tags))}\"")  # Pre-computed
+    print(f"export NUCLEI_TAGS=\"{','.join(sorted(nuclei_tags))}\"")
 
 
 if __name__ == '__main__':
     whatweb_f = sys.argv[1] if len(sys.argv) > 1 else ""
     wafw00f_f = sys.argv[2] if len(sys.argv) > 2 else ""
     parse_web_state(whatweb_f, wafw00f_f)
-    
