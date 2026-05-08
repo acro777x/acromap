@@ -227,6 +227,7 @@ NOTIFY_CHANNEL=""      # notify provider config (slack/discord/telegram)
 JQ_AVAILABLE=false     # jq installed — enables structured JSON finding parse
 ANEW_AVAILABLE=false   # anew installed — dedup pipeline for subdomain/url lists
 PARALLEL_JOBS=1        # GNU parallel jobs (set to nproc/2 if parallel installed)
+PARALLEL_EXECUTION_ACTIVE=false  # Global flag for parallel subshells
 
 # ── Proxy / VPN Mode Detection ────────────────────────────────────────────────
 # Detects if script is being run through proxychains, torsocks, or VPN.
@@ -6720,3 +6721,4 @@ main() {
 }
 
 main "$@"
+
