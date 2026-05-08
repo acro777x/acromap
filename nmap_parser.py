@@ -103,3 +103,4 @@ if __name__ == '__main__':
         _emit_degraded("NO_INPUT", "No XML file argument provided")
         sys.exit(0)  # Do NOT crash the bash source pipeline
     parse_nmap(sys.argv[1])
+
