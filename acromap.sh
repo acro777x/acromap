@@ -4246,14 +4246,22 @@ phase_post_exploit() {
     local safe_payload="echo ${exec_token}"
     local enc_payload; enc_payload=$(python3 -c "import sys, urllib.parse; print(urllib.parse.quote(sys.argv[1]))" "$safe_payload" 2>/dev/null || echo "echo+${exec_token}")
     
-    for web_url in "${WEB_TARGETS[@]:0:3}"; do
+    for web_url in "${WEB_TARGETS[@]:0:2}"; do
         _is_valid_url "$web_url" || continue
         
         for ws_path in "${webshell_paths[@]}"; do
-            # Standard common command parameters
-            for param in "cmd" "c" "exec" "command" "pass"; do
+            # [HARDENED] Existence Proof: Only brute-force parameters if the file actually exists (HEAD check)
+            local head_t; head_t=$(proxy_timeout 5)
+            if ! curl -s -I -L --max-time "$head_t" "${web_url}/${ws_path}" 2>/dev/null | grep -qE "HTTP/.* 200"; then
+                continue
+            fi
+
+            # [HARDENED] Parameter Pruning: Only check primary params unless in deep mode
+            local params=("cmd" "c")
+            [[ "$SCAN_PROFILE" == "deep" ]] && params=("cmd" "c" "exec" "command" "pass")
+
+            for param in "${params[@]}"; do
                 local curl_t; curl_t=$(proxy_timeout 8)
-                # Attempt execution. Drop all output unless we match the exact exec token.
                 local ws_exec; ws_exec=$(curl -s -L --max-time "$curl_t" --max-filesize 51200 \
                     "${web_url}/${ws_path}?${param}=${enc_payload}" 2>/dev/null | grep -o "${exec_token}" | head -1 || true)
                 
@@ -4262,7 +4270,7 @@ phase_post_exploit() {
                         "A webshell or unauthenticated RCE backdoor is active. Arbitrary command execution was mathematically proven." \
                         "Remove file immediately. Conduct full forensic investigation. Rotate all credentials." \
                         "${web_url}/${ws_path}?${param}=... — Execution confirmed (Token: ${exec_token})"
-                    break # Stop checking parameters for this file if confirmed
+                    break
                 fi
             done
         done
@@ -4295,15 +4303,16 @@ phase_post_exploit() {
     done
 
     # ── DB Admin Panels (Differential Authentication State) ─────────────────
-    # A 200 OK means nothing (honeypots/WAFs spoof 200). 
-    for web_url in "${WEB_TARGETS[@]:0:3}"; do
+    for web_url in "${WEB_TARGETS[@]:0:2}"; do
         _is_valid_url "$web_url" || continue
         for db_admin in "phpmyadmin" "phppgadmin" "adminer.php" "dbadmin" "pma" "mysql"; do
-            local curl_t; curl_t=$(proxy_timeout 8)
+            local curl_t; curl_t=$(proxy_timeout 5)
+            # HEAD check first to save time
+            curl -s -I -L --max-time 3 "${web_url}/${db_admin}" 2>/dev/null | grep -qE "HTTP/.* 200" || continue
+
             local dba_resp; dba_resp=$(curl -s -L --max-time "$curl_t" --max-filesize 51200 \
                 "${web_url}/${db_admin}" 2>/dev/null | head -c 8192 || echo "")
             
-            # Check for specific structural elements that prove it's the actual tool, not just a 200 OK.
             if echo "$dba_resp" | grep -qi "pma_username" && echo "$dba_resp" | grep -qi "pma_password"; then
                 add_vuln "HIGH" "Database Admin Interface Exposed: /${db_admin}" \
                     "Database administration interface accessible from internet. Structural proof confirmed (Login fields detected)." \
@@ -4319,8 +4328,7 @@ phase_post_exploit() {
     done
 
     # ── Sensitive Files (Strict Content Validation) ─────────────────────────
-    # A 200 OK means nothing. We only flag if the content structurally matches the file type perfectly.
-    for web_url in "${WEB_TARGETS[@]:0:3}"; do
+    for web_url in "${WEB_TARGETS[@]:0:2}"; do
         _is_valid_url "$web_url" || continue
         local sensitive_files=(
             ".aws/credentials" "aws.json" ".ssh/id_rsa" ".bash_history"
@@ -4328,6 +4336,9 @@ phase_post_exploit() {
             ".git/config" ".env" "wp-config.php" "phpinfo.php"
         )
         for sfile in "${sensitive_files[@]}"; do
+            # [HARDENED] HEAD check first
+            curl -s -I -L --max-time 3 "${web_url}/${sfile}" 2>/dev/null | grep -qE "HTTP/.* 200" || continue
+
             local curl_t; curl_t=$(proxy_timeout 8)
             local sf_resp; sf_resp=$(curl -s -L --max-time "$curl_t" --max-filesize 51200 \
                 "${web_url}/${sfile}" 2>/dev/null | head -c 4096 || echo "")
@@ -4344,7 +4355,6 @@ phase_post_exploit() {
             elif [[ "$sfile" == ".git/config" ]] && echo "$sf_resp" | grep -qE "\[core\]|\[remote"; then
                 confirmed=true; proof_string="Git config structure"
             elif [[ "$sfile" == ".env" ]]; then
-                # Needs at least 3 valid env var assignments to confirm it's not a false positive
                 local env_count=$(echo "$sf_resp" | grep -cE "^[A-Z0-9_]+=" || echo 0)
                 if [[ $env_count -ge 3 ]]; then
                     confirmed=true; proof_string="Multiple valid ENV assignments"
