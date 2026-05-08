@@ -1273,8 +1273,12 @@ phase_setup() {
 
                     trufflehog)
                         _apt_install "trufflehog" false || curl -sL --max-time 60 "https://raw.githubusercontent.com/trufflesecurity/trufflehog/main/scripts/install.sh" 2>/dev/null | bash -s -- --bin-dir /usr/local/bin &>/dev/null 2>&1 || true ;;
-                            timeout 60 git clone --quiet --depth 1                                 "https://github.com/Tuhinshubhra/CMSeeK"                                 /opt/cmseek 2>/dev/null &&                             printf "#!/bin/bash\npython3 /opt/cmseek/cmseek.py \"\$@\"\n"                                 > /usr/local/bin/cmseek &&                             chmod +x /usr/local/bin/cmseek &&                             echo -e "  ${LGREEN}✓ cmseek installed from git${NC}" ||                             echo -e "  ${YELLOW}⚠ cmseek optional — CMS detection still uses WhatWeb${NC}"
-                        fi ;;
+                    cmseek)
+                        timeout 60 git clone --quiet --depth 1 "https://github.com/Tuhinshubhra/CMSeeK" /opt/cmseek 2>/dev/null && \
+                        printf "#!/bin/bash\npython3 /opt/cmseek/cmseek.py \"\$@\"\n" > /usr/local/bin/cmseek && \
+                        chmod +x /usr/local/bin/cmseek && \
+                        echo -e "  ${LGREEN}✓ cmseek installed from git${NC}" || \
+                        echo -e "  ${YELLOW}⚠ cmseek optional — CMS detection still uses WhatWeb${NC}" ;;
 
                     certipy-ad)
                         if timeout 120 pip3 install certipy-ad --break-system-packages -q 2>/dev/null; then
@@ -1371,6 +1375,11 @@ phase_setup() {
                         if DEBIAN_FRONTEND=noninteractive timeout 90 apt-get install -y -qq dnsx &>/dev/null 2>&1; then
                             printf "  \033[32m✓\033[0m installed via apt\n"
                         else
+                            _go_install dnsx "github.com/projectdiscovery/dnsx/cmd/dnsx@latest" || true
+                        fi ;;
+
+                    gau)
+                        if DEBIAN_FRONTEND=noninteractive timeout 90 apt-get install -y -qq gau &>/dev/null 2>&1; then
                             printf "  \033[32m✓\033[0m installed via apt\n"
                         else
                             _go_install gau "github.com/lc/gau/v2/cmd/gau@latest" || true
