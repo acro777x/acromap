@@ -91,6 +91,15 @@ Vulnerabilities are now confirmed via active loops:
 
 ---
 
+### 🧠 The Sensor Layer: Why Python?
+
+v5.0 introduces dedicated Python engines to move away from unreliable text-grepping.
+
+- **nmap_parser.py**: Uses `xml.etree` to deterministically extract ports, OS guesses, and service versions. It includes a **Root-Tag Guard**—if a WAF replaces Nmap's XML with an HTML block, the parser detects the "Sensory Blindness" and warns the operator.
+- **web_parser.py**: Handles the extraction of CMS types and WAF names from JSON/XML buffers. It features a **Garbage-Stripping Algorithm** that isolates valid data from WAF-injected HTML noise, ensuring that technology fingerprinting is 100% accurate.
+
+---
+
 ## 🗂️ 32-Phase Architecture
 
 ```
