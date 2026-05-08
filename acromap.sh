@@ -2765,10 +2765,15 @@ phase_ssl() {
         command -v testssl.sh &>/dev/null || testssl_cmd="testssl"
         log_info "testssl.sh: scanning ${ssl_target}:${ssl_port}..."
         local testssl_t; testssl_t=$(proxy_timeout 180)
+        # ── [HARDENED] Added --fast and --parallel to prevent hangs ───────────
         run_tool_timeout "testssl" "${ssl_dir}/testssl.txt" "$testssl_t" \
-            "$testssl_cmd" --jsonfile "${ssl_dir}/testssl.json" \
+            "$testssl_cmd" --fast --parallel --jsonfile "${ssl_dir}/testssl.json" \
             --severity HIGH --warnings off --color 0 \
-            "${ssl_target}:${ssl_port}" 2>/dev/null || true
+            "${ssl_target}:${ssl_port}" 2>/dev/null || {
+                # Second attempt with minimal checks if timed out
+                log_warn "testssl timed out. Attempting minimal scan..."
+                timeout 60 "$testssl_cmd" -p -s -h "${ssl_target}:${ssl_port}" > "${ssl_dir}/testssl_min.txt" 2>/dev/null || true
+            }
         [[ -s "${ssl_dir}/testssl.json" || -s "${ssl_dir}/testssl.txt" ]] && testssl_ran=true
     fi
 
@@ -2930,17 +2935,22 @@ phase_content_discovery() {
             continue
         fi
 
-        # feroxbuster (fastest)
+        # [HARDENED] Adaptive Fuzzing Parameters
+        local _fuzz_threads=40
+        [[ "$HAS_WAF" == "true" ]] && _fuzz_threads=10 && log_info "WAF detected — throttling fuzzing to 10 threads"
+
+        # feroxbuster (primary)
         if command -v feroxbuster &>/dev/null; then
             local fero_ext="php,asp,aspx,jsp,html,js,json,txt,xml,bak,conf,env,zip,sql,tar,gz"
-            local fero_t=180  # default — overridden per profile below
+            local fero_t=180
             [[ "$SCAN_PROFILE" == "quick"    ]] && fero_t=120
             [[ "$SCAN_PROFILE" == "standard" ]] && fero_t=300
             [[ "$SCAN_PROFILE" == "deep"     ]] && fero_t=600
+            
             run_tool_timeout "feroxbuster-${slug}" \
                 "${OUTPUT_DIR}/feroxbuster/fero_${slug}.txt" "$fero_t" \
                 feroxbuster --url "$web_url" --wordlist "$wlist_web" \
-                --extensions "$fero_ext" --threads 50 --depth 3 \
+                --extensions "$fero_ext" --threads "$_fuzz_threads" --depth 2 \
                 --quiet --filter-status 404,500,503 2>/dev/null || true
 
             local ff="${OUTPUT_DIR}/feroxbuster/fero_${slug}.txt"
@@ -2994,36 +3004,42 @@ phase_content_discovery() {
         fi
 
         # gobuster
-        # Skip DNS brute force if wildcard detected
-    if command -v gobuster &>/dev/null && [[ "$WILDCARD_DNS" == false ]]; then
+        # [HARDENED] Skip gobuster if feroxbuster already found critical files to avoid WAF ban
+        local _skip_redundant=false
+        [[ -s "${OUTPUT_DIR}/feroxbuster/fero_${slug}.txt" ]] && [[ "$SCAN_PROFILE" != "deep" ]] && _skip_redundant=true
+        
+        if command -v gobuster &>/dev/null && [[ "$WILDCARD_DNS" == false ]] && [[ "$_skip_redundant" == false ]]; then
+            [[ "$HAS_WAF" == "true" ]] && sleep 5 # Sequential cool-down
             local gob_t=240
             [[ "$SCAN_PROFILE" == "quick" ]] && gob_t=90
             run_tool_timeout "gobuster-${slug}" "${OUTPUT_DIR}/gobuster/gobuster_${slug}.txt" \
                 "$gob_t" \
                 gobuster dir -u "$web_url" -w "$wlist_web" \
-                -x php,asp,aspx,html,txt,bak,conf,js -t 40 -q --no-error \
+                -x php,asp,aspx,html,txt,bak,conf,js -t "$_fuzz_threads" -q --no-error \
                 2>/dev/null || true
         fi
 
         # ffuf
-        if command -v ffuf &>/dev/null; then
+        if command -v ffuf &>/dev/null && [[ "$_skip_redundant" == false ]]; then
+            [[ "$HAS_WAF" == "true" ]] && sleep 5
             local ffuf_t=240
             [[ "$SCAN_PROFILE" == "quick" ]] && ffuf_t=90
             local ffuf_json="${OUTPUT_DIR}/ffuf/ffuf_${slug}.json"
             run_tool_timeout "ffuf-${slug}" "${OUTPUT_DIR}/ffuf/ffuf_${slug}_stdout.txt" \
                 "$ffuf_t" \
                 ffuf -w "${wlist_web}:FUZZ" -u "${web_url}/FUZZ" \
-                -mc 200,201,301,302,401,403 -t 40 -silent \
+                -mc 200,201,301,302,401,403 -t "$_fuzz_threads" -silent \
                 -o "$ffuf_json" -of json 2>/dev/null || true
         fi
 
         # nikto
-        if command -v nikto &>/dev/null; then
+        if command -v nikto &>/dev/null && [[ "$_skip_redundant" == false ]]; then
+            [[ "$HAS_WAF" == "true" ]] && sleep 10 # Long cool-down for Nikto (very noisy)
             local nikto_t=300
             [[ "$SCAN_PROFILE" == "quick" ]] && nikto_t=120
             [[ "$SCAN_PROFILE" == "deep"  ]] && nikto_t=600
             run_tool_timeout "nikto-${slug}" "${OUTPUT_DIR}/nikto/nikto_${slug}.txt" "$nikto_t" \
-                nikto -h "$web_url" -nointeractive -Format txt 2>/dev/null || true
+                nikto -h "$web_url" -nointeractive -Format txt -Tuning 123bde -useragent "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AcroMap/5.0" 2>/dev/null || true
 
             local nf="${OUTPUT_DIR}/nikto/nikto_${slug}.txt"
             if [[ -f "$nf" ]]; then
@@ -3046,7 +3062,8 @@ phase_content_discovery() {
         fi
 
         # dirb (as backup)
-        if command -v dirb &>/dev/null && [[ "$SCAN_PROFILE" != "quick" ]]; then
+        if command -v dirb &>/dev/null && [[ "$SCAN_PROFILE" == "deep" ]] && [[ "$_skip_redundant" == false ]]; then
+            [[ "$HAS_WAF" == "true" ]] && sleep 5
             run_tool_timeout "dirb-${slug}" "${OUTPUT_DIR}/dirb/dirb_${slug}.txt" 180 \
                 dirb "$web_url" "$wlist_web" \
                 -S -r -w 2>/dev/null || true
