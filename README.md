@@ -2,16 +2,16 @@
 
 <img src="banner.svg" alt="ACROMAP Banner" width="100%"/>
 
-**ACROMAP v5.0 — 32-Phase Deep Penetration Testing Framework**
+**ACROMAP v5.0 — 32-Phase Hardened Penetration Testing Framework**
 
 [![Platform](https://img.shields.io/badge/Platform-Kali%20Linux-blue?style=flat-square&logo=linux)](https://www.kali.org/)
 [![Shell](https://img.shields.io/badge/Shell-Bash-green?style=flat-square&logo=gnu-bash)](https://www.gnu.org/software/bash/)
-[![Version](https://img.shields.io/badge/Version-5.0-red?style=flat-square)](https://github.com/acro777x/acromap/releases)
+[![Version](https://img.shields.io/badge/Version-5.0--Hardened-red?style=flat-square)](https://github.com/acro777x/acromap/releases)
 [![License](https://img.shields.io/badge/License-MIT-yellow?style=flat-square)](LICENSE)
 [![CVE Coverage](https://img.shields.io/badge/CVEs-2019–2026-orange?style=flat-square)](https://cve.mitre.org/)
 [![Ethical Use](https://img.shields.io/badge/Use-Authorized%20Only-critical?style=flat-square)](#legal-disclaimer)
 
-*Built for penetration testers, red teamers, CTF players, and security researchers.*
+*Built for penetration testers who demand mathematical certainty and WAF-resilient results.*
 
 </div>
 
@@ -20,17 +20,13 @@
 ## 📖 Table of Contents
 
 - [Overview](#-overview)
-- [What's New in v5.0](#-whats-new-in-v50)
-- [Features](#-features)
+- [What's New in v5.0 (Hardened Edition)](#-whats-new-in-v50-hardened-edition)
+- [The 6-Layer Hardening Stack](#-the-6-layer-hardening-stack)
 - [32-Phase Architecture](#-32-phase-architecture)
 - [Requirements](#-requirements)
 - [Installation](#-installation)
 - [Usage](#-usage)
-- [Scan Profiles](#-scan-profiles)
 - [Output Structure](#-output-structure)
-- [Vulnerability Severity Levels](#-vulnerability-severity-levels)
-- [Notification Integrations](#-notification-integrations)
-- [Resume & Checkpoint System](#-resume--checkpoint-system)
 - [Legal Disclaimer](#-legal-disclaimer)
 - [Author](#-author)
 
@@ -38,63 +34,36 @@
 
 ## 🔍 Overview
 
-**ACROMAP v5.0** is a fully automated, root-level penetration testing framework written in Bash. It chains **32 sequential phases** — from passive OSINT reconnaissance through active exploitation simulation, cloud misconfiguration auditing, Active Directory deep dives, and zero-day pattern detection — into a single command.
+**ACROMAP v5.0** is a fully automated, root-level penetration testing framework. Unlike traditional scanners that rely on heuristic "grepping" of text output, the v5.0 **Hardened Edition** implements **Aristotelian Logic Proofs** to ensure that every finding is behaviorally confirmed and every failure is explicitly documented.
 
-Designed for **Kali Linux** (Debian/Ubuntu compatible), ACROMAP auto-escalates privileges, parallelizes early recon phases for speed, shows a live braille spinner during every tool run, maintains scan checkpoints for resume support, and pushes real-time Slack/email alerts on critical findings.
-
-> **Supported targets:** Single IP · Domain Name · CIDR Range
+Designed for **Kali Linux**, ACROMAP auto-escalates privileges, parallelizes recon, and maintains scan checkpoints for resume support.
 
 ---
 
-## 🆕 What's New in v5.0
+## 🆕 What's New in v5.0 (Hardened Edition)
 
-### ⚡ Parallel Recon Engine (Phases 1–3)
-OSINT, DNS Enumeration, and Subdomain discovery now run **simultaneously** in background jobs, cutting early recon time by up to 3x. An IPC file (`vuln_ipc.txt`) safely syncs findings across subshells back into the parent process.
+### 🛡️ Aristotelian "Explicit State Degradation"
+Legacy scanners fail silently when blinded by a WAF. ACROMAP v5.0 introduces **Sensor Layer Degradation**. Our new Python engines (`nmap_parser.py`, `web_parser.py`) detect when a WAF has injected garbage into scan results and explicitly signal the dispatcher. **The state becomes `UNKNOWN`, never "Secure by Error."**
 
-### 🌀 Live Braille Spinner
-Every tool execution now shows a real-time animated braille spinner (`⠋ ⠙ ⠹ ⠸ ⠼ ⠴ ⠦ ⠧ ⠇ ⠏`) with elapsed time — no more staring at a blank terminal wondering if the scan is still running.
+### 📐 Arithmetic Hardening (The 10#0 Paradigm)
+Eliminated all bash-arithmetic crashes. Every calculation (latency, port counts, finding tabulations) now uses base-10 forced evaluation. This ensures immunity to octal collisions (e.g., `08`, `09`), null-variable crashes, and malformed tool outputs.
 
-### 🔒 Source Integrity Guard
-A built-in `_acro_guard()` function verifies that the script's attribution and repository reference are intact before execution. If the file has been stripped of attribution, the tool refuses to run and points back to the original source.
-
-### 🖥️ Improved Auto-Escalation
-The privilege escalation chain now supports both `sudo` and `su` as fallbacks — covering environments where `sudo` is not installed. The script also self-`chmod +x`s after elevation for future runs.
-
-### 🎨 Cyber-Noir Phase Display
-Each phase boundary now renders a rich terminal UI showing the current phase number (out of 32), phase name, active target, and live **Critical / High** finding counts — updated at every phase transition.
-
-### 🛡️ Interrupt & Terminal Safety
-`_ACROMAP_INTERRUPTED` flag enables clean Ctrl+C handling mid-tool. All spinner and keypress code now guards against non-TTY environments with proper `stty sane` resets, preventing terminal corruption.
-
-### 🔗 URL Validation Helper
-Internal `_is_valid_url()` guard prevents malformed URLs from being passed to web-phase tools, reducing false tool failures on edge-case targets.
-
-### 🏷️ Additional Runtime Flags
-- `WILDCARD_DNS` — detected automatically; suppresses false-positive subdomain results
-- `_TF_SCAN_DONE` — prevents duplicate TruffleHog filesystem scans across phases
-- `PARALLEL_EXECUTION_ACTIVE` — global flag that switches tool wrappers to parallel-safe output mode
+### 🧬 Deterministic Behavioral Proofing
+Moved beyond simple status-code checking. Vulnerabilities are now confirmed via:
+- **Differential Boolean Analysis:** (SQLi) Comparing Baseline vs True vs False responses.
+- **Safe Execution Loops:** (Webshells) Reflecting unique MD5-hashed tokens in execution.
+- **Asynchronous OOB Polling:** (XSS/SSRF) A 9-second centralized polling window for DNS/LDAP callbacks.
 
 ---
 
-## ✨ Features
+## 🏗️ The 6-Layer Hardening Stack
 
-| Feature | Description |
-|---|---|
-| ⚡ **Parallel Recon** | Phases 1–3 run simultaneously — OSINT, DNS, Subdomains in parallel |
-| 🌀 **Live Braille Spinner** | Animated progress indicator on every tool run with elapsed time |
-| 🔄 **32-Phase Engine** | Fully automated recon-to-report pipeline |
-| 🔒 **Source Integrity Guard** | Refuses to run if attribution has been stripped |
-| 🎯 **3 Scan Profiles** | `quick` / `standard` / `deep` with per-phase timeout tuning |
-| 📡 **CIDR Sweep Mode** | Ping sweep + nmap + masscan across entire network ranges |
-| 🔔 **Live Notifications** | Instant push on CRITICAL/HIGH/ZERO-DAY findings via Slack or email |
-| 💾 **Checkpoint & Resume** | Interrupted scans resume from the last completed phase |
-| 📊 **Confidence Scoring** | Auto-calculated 0–10 score based on tool success, depth, and findings |
-| 🕵️ **Zero-Day Detection** | Heuristic pattern matching for zero-day and one-click exploit surfaces |
-| ☁️ **Cloud & K8s Auditing** | AWS/GCP/Azure metadata enum + Kubernetes cluster security audit |
-| 🏢 **AD Deep Attack Surface** | Active Directory enumeration and lateral movement path analysis |
-| 🧵 **GNU Parallel Support** | Multi-job throughput when `parallel` is available |
-| 📡 **OOB Testing** | Interactsh integration for blind SSRF and OOB callback detection |
-| 🔑 **Secrets Detection** | TruffleHog + gitleaks for supply chain and secrets exposure |
+1.  **Memory-Resident State Engine:** Zero-disk state transfer via a secure memory bridge between pre-flight and execution phases.
+2.  **Structured Data Engines:** Deterministic XML/JSON parsing for Nmap, WhatWeb, and Wafw00f with explicit degradation guards.
+3.  **Explicit State Degradation:** The framework never "fails silently." If a scanner is blinded by a WAF, it is explicitly logged as `UNKNOWN`.
+4.  **Behavioral Proofing:** Vulnerabilities are confirmed via active loops (OOB callbacks, differential analysis) rather than simple status codes.
+5.  **Arithmetic Hardening:** Every calculation uses the `10#0` paradigm, ensuring immunity to octal collisions and null-variable crashes.
+6.  **OOB Verification Engine:** Centralized asynchronous polling for XSS, SSRF, and Log4Shell callbacks.
 
 ---
 
@@ -102,9 +71,9 @@ Internal `_is_valid_url()` guard prevents malformed URLs from being passed to we
 
 ```
 Phase 00 ── Setup & Tool Verification
-Phase 01 ── Passive OSINT Reconnaissance          ┐
-Phase 02 ── DNS Enumeration & Zone Transfer       ├─ Parallelized
-Phase 03 ── Subdomain Enumeration (Deep)          ┘
+Phase 01 ── Passive OSINT Reconnaissance
+Phase 02 ── DNS Enumeration & Zone Transfer
+Phase 03 ── Subdomain Enumeration (Deep)
 Phase 04 ── Network Discovery & Host Detection
 Phase 05 ── Full TCP Port Scanning
 Phase 06 ── UDP Port Scanning
@@ -124,203 +93,88 @@ Phase 19 ── XSS & Client-Side Attack Vectors
 Phase 20 ── CVE 2024–2026 Targeted Checks
 Phase 21 ── Post-Exploitation Simulation
 Phase 22 ── Attack Path & Lateral Movement Analysis
-Phase 23 ── Report Generation  (always last)
-Phase 24 ── Cloud Metadata & Misconfiguration Enum
-Phase 25 ── Kubernetes Cluster Audit
-Phase 26 ── Password Spray & Credential Attacks
-Phase 27 ── CORS & JWT Authentication Testing
-Phase 28 ── SSRF Deep Chain & OOB Testing
-Phase 29 ── Secrets & Supply Chain Exposure
-Phase 30 ── Active Directory Deep Attack Surface
-Phase 31 ── Zero-Day & One-Click Exploit Detection
+Phase 23 ── Report Generation
+Phase 24–31 ── Cloud, K8s, Secrets, and Zero-Day Detection
 ```
 
 ---
 
 ## 📋 Requirements
 
-### Operating System
-- **Primary:** Kali Linux
-- **Compatible:** Debian / Ubuntu
-
-### Root Privileges
-ACROMAP auto-escalates on launch. It tries `sudo` first, then falls back to `su root`. For best results run directly as root.
-
-```bash
-sudo bash acromap.sh
-```
-
-### Tools (auto-detected — missing tools are skipped gracefully)
-
-**Recon & OSINT** — `whois`, `dig`, `theHarvester`, `amass`, `subfinder`, `assetfinder`, `dnsx`, `massdns`
-
-**Network Scanning** — `nmap`, `masscan`, `netcat`
-
-**Web** — `httpx`, `whatweb`, `wafw00f`, `ffuf`, `gobuster`, `feroxbuster`, `wpscan`, `nikto`, `nuclei`
-
-**Exploitation** — `sqlmap`, `dalfox`, `hydra`, `medusa`, `crackmapexec`, `metasploit-framework`
-
-**Cloud & Identity** — `aws`, `gcloud`, `az`, `kubectl`
-
-**Secrets** — `trufflehog`, `gitleaks`
-
-**Utilities** — `jq`, `anew`, `notify`, `interactsh-client`, `parallel`
-
-**Optional DAST** — OWASP ZAP (auto-detected if daemon is running)
+- **Operating System:** Kali Linux (Primary) / Debian / Ubuntu
+- **Privileges:** Root (auto-escalates)
+- **Dependencies:** `bash`, `python3`, `curl`, `jq`, `anew`, `nmap`, `nuclei`
 
 ---
 
 ## 🔧 Installation
 
 ```bash
-# Clone the repository
 git clone https://github.com/acro777x/acromap.git
 cd acromap
-
-# Make executable
 chmod +x acromap.sh
-
-# Install core tools on Kali (recommended)
-sudo apt update && sudo apt install -y \
-  nmap masscan amass subfinder \
-  httpx-toolkit nuclei ffuf gobuster \
-  nikto sqlmap dalfox hydra \
-  crackmapexec wpscan jq
 ```
-
-> The script will `chmod +x` itself automatically after first root escalation.
 
 ---
 
 ## 🚀 Usage
 
+### 1. Pre-Flight Calibration
+Sets up the memory bridge and calculates the WAF interference threshold.
 ```bash
-# Standard run — recommended
-sudo bash acromap.sh
-
-# Resume an interrupted scan
-sudo bash acromap.sh --resume
+sudo ./preflight.sh <target>
 ```
 
-You will be prompted interactively for:
+### 2. Integrity Check
+Verify the mathematical and logical integrity of your local installation:
+```bash
+bash qa_harness.sh
+```
 
-1. **Target** — IP address, domain name, or CIDR range (e.g. `192.168.1.0/24`)
-2. **Scan Profile** — `quick` / `standard` / `deep`
+### 3. Execute Scan
+```bash
+sudo bash acromap.sh <target>
+```
 
 ### Live Keypress Controls
 
 | Key | Action |
 |-----|--------|
-| `T` | Print real-time status (phase, tool, ETA, findings so far) |
+| `T` | Print real-time status (phase, tool, ETA, findings) |
 | `D` | Toggle debug output on/off |
 | `Ctrl+C` | Graceful interrupt — saves checkpoint for resume |
-
----
-
-## ⚡ Scan Profiles
-
-| Profile | Timeout Depth | Best For | Approx Duration |
-|---------|--------------|----------|----------------|
-| `quick` | Short | Initial triage, fast surface scan | ~15–30 min |
-| `standard` | Balanced | Default, most engagements | ~1–3 hours |
-| `deep` | Extended | Full assessment, bug bounty, red team | ~4–8+ hours |
 
 ---
 
 ## 📂 Output Structure
 
 ```
-acromap_<target>_<timestamp>/
-├── acromap.log                   # Full timestamped run log
-├── checkpoint.txt                # Resume state (last completed phase)
-├── vuln_ipc.txt                  # IPC file for parallel phase sync
-├── report/
-│   └── acromap_report.txt        # Final structured report
-├── osint/                        # Phase 01 results
-├── dns/                          # Phase 02 results
-├── subdomains/
-│   ├── all_subdomains.txt
-│   ├── live_subdomains.txt
-│   └── takeover_candidates.txt
-├── ports/                        # TCP/UDP scan results
-├── services/                     # Banner grabs
-├── web/                          # Web discovery, CMS, API
-├── vulns/                        # Nuclei findings
-├── smb/                          # SMB & AD enumeration
-├── cloud/                        # Cloud metadata
-├── k8s/                          # Kubernetes audit
-├── secrets/                      # TruffleHog / gitleaks output
-├── ad/                           # Active Directory deep results
-├── cidr_hosts/                   # CIDR sweep (if CIDR target)
-└── msf_resource.rc               # Auto-generated Metasploit resource script
+acromap_repo/
+├── acromap.sh           # Main Hardened Engine
+├── preflight.sh         # Memory Bridge & Calibration
+├── nmap_parser.py       # XML Structured Sensor (Explicit Degradation)
+├── web_parser.py        # JSON Structured Sensor (WAF-Garbage Stripping)
+├── qa_harness.sh        # Aristotelian Integrity Suite
+└── README.md            # Hardened Documentation
 ```
-
----
-
-## 🚨 Vulnerability Severity Levels
-
-| Severity | Colour | Description |
-|----------|--------|-------------|
-| 🟣 `ZERO_DAY` | Blinking Magenta | Unpatched / zero-day pattern detected |
-| 🔴 `ONE_CLICK` | Underline Red | Single-action exploitable (e.g. subdomain takeover, RCE) |
-| 🔴 `CRITICAL` | Red | Immediate exploitation risk |
-| 🟠 `HIGH` | Orange | High-impact, readily exploitable |
-| 🟡 `MEDIUM` | Yellow | Moderate risk, requires chaining |
-| 🔵 `LOW` | Cyan | Low severity / defence-in-depth gap |
-| ⚪ `INFO` | White | Informational |
-
-A **Confidence Score (0.0–10.0)** is computed at the end based on tool success rate, scan profile depth, phases completed, and finding data quality.
-
----
-
-## 🔔 Notification Integrations
-
-```bash
-# Slack webhook — set before running
-export SLACK_WEBHOOK="https://hooks.slack.com/services/YOUR/WEBHOOK/URL"
-
-# Email notification
-export NOTIFY_EMAIL_ADDR="you@example.com"
-
-# Push every CRITICAL/HIGH finding instantly (requires projectdiscovery/notify)
-export NOTIFY_PER_FINDING=true
-export NOTIFY_CHANNEL="slack"    # slack | discord | telegram
-```
-
----
-
-## 💾 Resume & Checkpoint System
-
-```bash
-# If a scan is interrupted, resume it from the last completed phase
-sudo bash acromap.sh --resume
-```
-
-A `checkpoint.txt` file is written after every phase. On resume, all completed phases are skipped automatically. The parallel recon block (phases 1–3) is treated as a single checkpoint unit.
 
 ---
 
 ## ⚖️ Legal Disclaimer
 
-This tool is released **free and open source** for the security community. It is intended **solely** for:
-
-- Authorized penetration testing on systems you **own or have explicit written permission** to test
-- CTF / lab environments (TryHackMe, HackTheBox,  CSPL)
-- Academic and educational security research
-
-**Unauthorized use is illegal** under the Computer Fraud and Abuse Act (CFAA), UK Computer Misuse Act, IT Act 2000 (India), and equivalent laws worldwide. The author bears **no responsibility** for illegal or malicious use. By running this tool you accept **full legal responsibility** for your actions.
+Authorized use only. Unauthorized use is illegal. The author bears no responsibility for illegal or malicious use. By running this tool you accept full legal responsibility for your actions.
 
 ---
 
 ## 👤 Author
 
-**acro777x**
+**acro777x**  
 GitHub: [https://github.com/acro777x](https://github.com/acro777x)
 
 ---
 
 <div align="center">
 
-*ACROMAP v5.0 — Scan smarter. Report faster. Hack ethically.*
+*ACROMAP v5.0 — Scan smarter. Prove it.*
 
 </div>
