@@ -212,6 +212,15 @@ acromap_repo/
 This tool is intended **solely** for authorized penetration testing on systems you **own or have explicit written permission** to test. Unauthorized use is illegal under the Computer Fraud and Abuse Act (CFAA) and equivalent laws worldwide. The author bears **no responsibility** for illegal or malicious use.
 
 ---
+## Star History
+
+<a href="https://www.star-history.com/?repos=acro777x%2Facromap&type=date&legend=top-left">
+ <picture>
+   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/chart?repos=acro777x/acromap&type=date&theme=dark&legend=top-left" />
+   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/chart?repos=acro777x/acromap&type=date&legend=top-left" />
+   <img alt="Star History Chart" src="https://api.star-history.com/chart?repos=acro777x/acromap&type=date&legend=top-left" />
+ </picture>
+</a>
 
 ## 👤 Author
 
